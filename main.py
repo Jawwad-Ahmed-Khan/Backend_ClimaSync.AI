@@ -1,6 +1,5 @@
-def main():
-    print("Hello from backend-clima!")
+"""Project entry point — creates the FastAPI application."""
 
+from app.main import create_app
 
-if __name__ == "__main__":
-    main()
+app = create_app()
