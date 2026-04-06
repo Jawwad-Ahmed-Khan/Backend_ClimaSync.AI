@@ -18,10 +18,14 @@ from app.core.security import (
     hash_password,
     hash_token,
     verify_otp,
+    verify_password,
 )
 from app.modules.auth.exceptions import (
+    AccountDisabledException,
     EmailAlreadyRegisteredException,
     EmailAlreadyVerifiedException,
+    EmailNotVerifiedException,
+    InvalidCredentialsException,
     NoPendingVerificationException,
     OtpExpiredException,
     OtpInvalidException,
@@ -33,6 +37,8 @@ from app.modules.auth.repository import (
     VerificationTokenRepository,
 )
 from app.modules.auth.schemas import (
+    LoginRequest,
+    LoginResponse,
     RegisterNgoRequest,
     RegisterResponse,
     ResendOtpRequest,
@@ -225,6 +231,67 @@ class AuthService:
         )
 
     # ------------------------------------------------------------------
+    # login
+    # ------------------------------------------------------------------
+
+    async def login(
+        self,
+        data: LoginRequest,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> LoginResponse:
+        """Authenticate a verified NGO user and return JWT tokens.
+
+        Validation order (fail-fast):
+        1. User exists by email
+        2. Password matches bcrypt hash
+        3. Account is active
+        4. Email is verified
+        """
+        user = await self._user_repo.get_by_email(data.email)
+
+        # Always run verify_password even when user is None to prevent
+        # timing-based user enumeration attacks.
+        password_ok = self._check_password(data.password, user.password_hash if user else "$2b$12$invalidhashpadding000000000000000")
+
+        if user is None or not password_ok:
+            raise InvalidCredentialsException()
+
+        self._validate_account_active(user.is_active)
+        self._validate_email_verified(user.email_verified)
+
+        access_token, refresh_token = self._generate_tokens(user.user_id)
+
+        now = datetime.now(timezone.utc)
+        await self._user_repo.update_last_login(user.user_id, now)
+
+        await self._store_refresh_token(
+            user_id=user.user_id,
+            refresh_token=refresh_token,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        profile = await self._ngo_repo.get_profile_by_ngo_id(user.user_id)
+
+        logger.info("NGO login: user=%s", user.user_id)
+
+        return LoginResponse(
+            message="Login successful",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user=UserBasicResponse(
+                user_id=user.user_id,
+                email=user.email,
+                role=user.role,
+                org_name=profile.org_name if profile else "",
+                is_active=user.is_active,
+                email_verified=user.email_verified,
+                verification_status=profile.verification_status if profile else "pending",
+            ),
+        )
+
+    # ------------------------------------------------------------------
     # resend_otp
     # ------------------------------------------------------------------
 
@@ -344,6 +411,20 @@ class AuthService:
         recent_count = await self._token_repo.count_recent_tokens(user_id)
         if recent_count >= settings.OTP_RATE_LIMIT_PER_HOUR:
             raise OtpRateLimitException()
+
+    def _check_password(self, plain_password: str, password_hash: str) -> bool:
+        """Constant-time bcrypt password comparison."""
+        return verify_password(plain_password, password_hash)
+
+    def _validate_account_active(self, is_active: bool) -> None:
+        """Raise if the account has been disabled."""
+        if not is_active:
+            raise AccountDisabledException()
+
+    def _validate_email_verified(self, email_verified: bool) -> None:
+        """Raise if the user has not yet verified their email."""
+        if not email_verified:
+            raise EmailNotVerifiedException()
 
 
 def _generate_temp_registration_number() -> str:

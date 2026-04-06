@@ -64,6 +64,20 @@ class ResendOtpRequest(BaseSchema):
     )
 
 
+class LoginRequest(BaseSchema):
+    """POST /auth/login request body."""
+
+    email: EmailStr = Field(
+        ...,
+        description="Registered email address",
+    )
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=72,
+        description="Account password",
+    )
+
 # ---------------------------------------------------------------------------
 # Response schemas
 # ---------------------------------------------------------------------------
@@ -90,6 +104,16 @@ class UserBasicResponse(BaseSchema):
 
 class VerifyOtpResponse(BaseSchema):
     """200 response after successful OTP verification."""
+
+    message: str
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user: UserBasicResponse
+
+
+class LoginResponse(BaseSchema):
+    """200 response after successful login."""
 
     message: str
     access_token: str

@@ -48,3 +48,14 @@ class NgoRepository:
         await self.session.flush()
         await self.session.refresh(resources)
         return resources
+
+    async def get_profile_by_ngo_id(
+        self,
+        ngo_id: uuid.UUID,
+    ) -> NgoProfile | None:
+        """Return the NGO profile for a given user/ngo id, or None."""
+        from sqlalchemy import select
+
+        stmt = select(NgoProfile).where(NgoProfile.ngo_id == ngo_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
