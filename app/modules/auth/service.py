@@ -1,8 +1,13 @@
-"""Auth service — business logic for registration, OTP verification, and resend.
+"""Auth service — business logic for registration, login, OTP verification, and resend.
 
 Orchestrates repositories and security utilities. Contains ALL business
 rules and decisions. NEVER imports FastAPI, HTTP concepts, or database
 session objects directly.
+
+Designed for extensibility: login() is structured so adding new
+authentication strategies (e.g. social/OAuth) requires only new
+service methods — the core token generation and storage helpers
+are shared and role-agnostic.
 """
 
 import logging
@@ -18,10 +23,14 @@ from app.core.security import (
     hash_password,
     hash_token,
     verify_otp,
+    verify_password,
 )
 from app.modules.auth.exceptions import (
+    AccountDisabledException,
     EmailAlreadyRegisteredException,
     EmailAlreadyVerifiedException,
+    EmailNotVerifiedException,
+    InvalidCredentialsException,
     NoPendingVerificationException,
     OtpExpiredException,
     OtpInvalidException,
@@ -33,6 +42,8 @@ from app.modules.auth.repository import (
     VerificationTokenRepository,
 )
 from app.modules.auth.schemas import (
+    LoginRequest,
+    LoginResponse,
     RegisterNgoRequest,
     RegisterResponse,
     ResendOtpRequest,
@@ -50,7 +61,7 @@ _TEMP_REG_PREFIX = "TEMP-"
 
 
 class AuthService:
-    """Handles registration, OTP verification, and OTP resend logic."""
+    """Handles registration, login, OTP verification, and OTP resend logic."""
 
     def __init__(
         self,
@@ -198,7 +209,9 @@ class AuthService:
         )
         await self._ngo_repo.create_resources(t.user_id)
 
-        access_token, refresh_token = self._generate_tokens(t.user_id)
+        access_token, refresh_token = self._generate_tokens(
+            t.user_id, role=_ROLE_NGO_USER,
+        )
 
         await self._store_refresh_token(
             user_id=t.user_id,
@@ -221,6 +234,81 @@ class AuthService:
                 is_active=True,
                 email_verified=True,
                 verification_status=profile.verification_status,
+            ),
+        )
+
+    # ------------------------------------------------------------------
+    # login
+    # ------------------------------------------------------------------
+
+    async def login(
+        self,
+        data: LoginRequest,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> LoginResponse:
+        """Authenticate a verified NGO user and return JWT tokens.
+
+        Validation order (fail-fast):
+        1. User exists by email
+        2. Password matches bcrypt hash (constant-time even if user is None)
+        3. Account is active
+        4. Email is verified
+
+        Extensibility:
+            Additional authentication strategies (e.g. social/OAuth)
+            can be added as new public methods that share the private
+            helpers `_generate_tokens`, `_store_refresh_token`, etc.
+        """
+        user = await self._user_repo.get_by_email(data.email)
+
+        # Always run verify_password even when user is None to prevent
+        # timing-based user enumeration attacks.
+        _dummy_hash = "$2b$12$invalidhashpadding000000000000000"
+        password_ok = self._check_password(
+            data.password,
+            user.password_hash if user else _dummy_hash,
+        )
+
+        if user is None or not password_ok:
+            raise InvalidCredentialsException()
+
+        self._validate_account_active(user.is_active)
+        self._validate_email_verified(user.email_verified)
+
+        # Use the role stored on the user record (supports ngo_user + admin)
+        access_token, refresh_token = self._generate_tokens(
+            user.user_id, role=user.role,
+        )
+
+        now = datetime.now(timezone.utc)
+        await self._user_repo.update_last_login(user.user_id, now)
+
+        await self._store_refresh_token(
+            user_id=user.user_id,
+            refresh_token=refresh_token,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        profile = await self._ngo_repo.get_profile_by_ngo_id(user.user_id)
+
+        logger.info("NGO login: user=%s", user.user_id)
+
+        return LoginResponse(
+            message="Login successful",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user=UserBasicResponse(
+                user_id=user.user_id,
+                email=user.email,
+                role=user.role,
+                org_name=profile.org_name if profile else "",
+                is_active=user.is_active,
+                email_verified=user.email_verified,
+                verification_status=(
+                    profile.verification_status if profile else "pending"
+                ),
             ),
         )
 
@@ -309,10 +397,16 @@ class AuthService:
     def _generate_tokens(
         self,
         user_id: uuid.UUID,
+        *,
+        role: str,
     ) -> tuple[str, str]:
-        """Create JWT access and refresh token pair."""
+        """Create JWT access and refresh token pair.
+
+        The role is read from the user record so that both ngo_user and
+        admin logins produce correctly scoped tokens without code changes.
+        """
         subject = str(user_id)
-        access = create_access_token(subject, {"role": _ROLE_NGO_USER})
+        access = create_access_token(subject, {"role": role})
         refresh = create_refresh_token(subject)
         return access, refresh
 
@@ -344,6 +438,20 @@ class AuthService:
         recent_count = await self._token_repo.count_recent_tokens(user_id)
         if recent_count >= settings.OTP_RATE_LIMIT_PER_HOUR:
             raise OtpRateLimitException()
+
+    def _check_password(self, plain_password: str, password_hash: str) -> bool:
+        """Constant-time bcrypt password comparison."""
+        return verify_password(plain_password, password_hash)
+
+    def _validate_account_active(self, is_active: bool) -> None:
+        """Raise if the account has been disabled."""
+        if not is_active:
+            raise AccountDisabledException()
+
+    def _validate_email_verified(self, email_verified: bool) -> None:
+        """Raise if the user has not yet verified their email."""
+        if not email_verified:
+            raise EmailNotVerifiedException()
 
 
 def _generate_temp_registration_number() -> str:

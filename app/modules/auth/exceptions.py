@@ -58,3 +58,24 @@ class EmailAlreadyVerifiedException(ValidationException):
 
     def __init__(self) -> None:
         super().__init__(detail="Email is already verified")
+
+
+class InvalidCredentialsException(UnauthorizedException):
+    """Raised when email/password do not match (generic — avoids user enumeration)."""
+
+    def __init__(self) -> None:
+        super().__init__(detail="Invalid email or password")
+
+
+class AccountDisabledException(ForbiddenException):
+    """Raised when the account is inactive / suspended."""
+
+    def __init__(self) -> None:
+        super().__init__(detail="Account is disabled. Please contact support.")
+
+
+class EmailNotVerifiedException(ForbiddenException):
+    """Raised when a user attempts to login before verifying their email."""
+
+    def __init__(self) -> None:
+        super().__init__(detail="Email address is not verified. Please check your inbox for the OTP.")

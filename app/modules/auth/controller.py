@@ -1,4 +1,4 @@
-"""Auth controller — HTTP endpoints for registration and OTP flows.
+"""Auth controller — HTTP endpoints for registration, login, and OTP flows.
 
 Handles ONLY HTTP concerns: request parsing, dependency injection,
 response shaping, and status codes. Business logic lives in AuthService.
@@ -10,6 +10,8 @@ from app.common.base_schemas import MessageResponse
 from app.core.limiter import limiter
 from app.modules.auth.dependencies import AuthServiceDep
 from app.modules.auth.schemas import (
+    LoginRequest,
+    LoginResponse,
     RegisterNgoRequest,
     RegisterResponse,
     ResendOtpRequest,
@@ -71,3 +73,25 @@ async def resend_otp(
     """Resend verification OTP. Rate limited to 5/hour."""
     result = await service.resend_otp(data)
     return MessageResponse(message=result["message"])
+
+
+@router.post(
+    "/login",
+    response_model=LoginResponse,
+    summary="Login as a verified NGO user",
+    description=(
+        "Authenticates an NGO user with email and password. "
+        "Returns JWT access + refresh tokens on success. "
+        "The account must be active and the email must be verified."
+    ),
+)
+@limiter.limit("10/minute")
+async def login(
+    request: Request,
+    data: LoginRequest,
+    service: AuthServiceDep,
+) -> LoginResponse:
+    """Authenticate NGO user and return JWT tokens."""
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    return await service.login(data, ip_address, user_agent)
