@@ -1,11 +1,13 @@
 """NGO repository — data access for ngo_profiles and ngo_resources tables.
 
 Provides creation methods used during OTP verification to set up the
-NGO organisation profile and default resource inventory.
+NGO organisation profile and default resource inventory, and lookup
+methods used during login.
 """
 
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.ngo.models import NgoProfile, NgoResource
@@ -48,3 +50,12 @@ class NgoRepository:
         await self.session.flush()
         await self.session.refresh(resources)
         return resources
+
+    async def get_profile_by_ngo_id(
+        self,
+        ngo_id: uuid.UUID,
+    ) -> NgoProfile | None:
+        """Return the NGO profile for a given user/ngo id, or None."""
+        stmt = select(NgoProfile).where(NgoProfile.ngo_id == ngo_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()

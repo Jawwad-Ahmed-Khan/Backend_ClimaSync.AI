@@ -64,3 +64,17 @@ class UserRepository:
         )
         await self.session.execute(stmt)
         await self.session.flush()
+
+    async def update_last_login(
+        self,
+        user_id: uuid.UUID,
+        logged_in_at: datetime,
+    ) -> None:
+        """Record the timestamp of the most recent successful login."""
+        stmt = (
+            update(User)
+            .where(User.user_id == user_id)
+            .values(last_login_at=logged_in_at)
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()
