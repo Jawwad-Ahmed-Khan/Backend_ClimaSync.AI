@@ -6,6 +6,7 @@ These map to HTTP codes solely through core/exception_handlers.py.
 from app.core.exceptions import (
     AlreadyExistsException,
     ForbiddenException,
+    NotFoundException,
     UnauthorizedException,
     ValidationException,
 )
@@ -79,3 +80,32 @@ class EmailNotVerifiedException(ForbiddenException):
 
     def __init__(self) -> None:
         super().__init__(detail="Email address is not verified. Please check your inbox for the OTP.")
+
+
+class PasswordMismatchException(ValidationException):
+    """Raised when the current password does not match during password change."""
+
+    def __init__(self) -> None:
+        super().__init__(detail="Current password is incorrect")
+
+
+class PasswordSameAsOldException(ValidationException):
+    """Raised when the new password is the same as the current one."""
+
+    def __init__(self) -> None:
+        super().__init__(detail="New password must be different from the current password")
+
+
+class InvalidRefreshTokenException(UnauthorizedException):
+    """Raised when a refresh token is invalid, expired, or revoked."""
+
+    def __init__(self) -> None:
+        super().__init__(detail="Invalid or expired refresh token")
+
+
+class NoProfileFoundException(NotFoundException):
+    """Raised when no NGO profile exists for the authenticated user."""
+
+    def __init__(self) -> None:
+        super().__init__(resource="NGO profile", identifier="current user")
+
