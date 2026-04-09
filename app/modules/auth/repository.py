@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.auth.models import AuthRefreshToken, AuthVerificationToken
 
 _PURPOSE_EMAIL_VERIFICATION = "email_verification"
+_PURPOSE_PASSWORD_RESET = "password_reset"
 
 
 class VerificationTokenRepository:
@@ -30,12 +31,13 @@ class VerificationTokenRepository:
         token_hash: str,
         expires_at: datetime,
         max_attempts: int,
+        purpose: str = _PURPOSE_EMAIL_VERIFICATION,
     ) -> AuthVerificationToken:
         """Insert a new verification token and return it."""
         token = AuthVerificationToken(
             user_id=user_id,
             email=email,
-            purpose=_PURPOSE_EMAIL_VERIFICATION,
+            purpose=purpose,
             token_hash=token_hash,
             expires_at=expires_at,
             max_attempts=max_attempts,
@@ -48,6 +50,7 @@ class VerificationTokenRepository:
     async def find_open_token_by_email(
         self,
         email: str,
+        purpose: str = _PURPOSE_EMAIL_VERIFICATION,
     ) -> AuthVerificationToken | None:
         """Find the most recent open (unused, unrevoked) token for an email."""
         stmt = (
@@ -55,7 +58,7 @@ class VerificationTokenRepository:
             .where(
                 and_(
                     AuthVerificationToken.email == email,
-                    AuthVerificationToken.purpose == _PURPOSE_EMAIL_VERIFICATION,
+                    AuthVerificationToken.purpose == purpose,
                     AuthVerificationToken.used_at.is_(None),
                     AuthVerificationToken.revoked_at.is_(None),
                 ),
@@ -98,6 +101,7 @@ class VerificationTokenRepository:
     async def revoke_open_tokens(
         self,
         user_id: uuid.UUID,
+        purpose: str = _PURPOSE_EMAIL_VERIFICATION,
     ) -> None:
         """Revoke all open tokens for a user+purpose."""
         stmt = (
@@ -105,7 +109,7 @@ class VerificationTokenRepository:
             .where(
                 and_(
                     AuthVerificationToken.user_id == user_id,
-                    AuthVerificationToken.purpose == _PURPOSE_EMAIL_VERIFICATION,
+                    AuthVerificationToken.purpose == purpose,
                     AuthVerificationToken.used_at.is_(None),
                     AuthVerificationToken.revoked_at.is_(None),
                 ),
@@ -118,6 +122,7 @@ class VerificationTokenRepository:
     async def count_recent_tokens(
         self,
         user_id: uuid.UUID,
+        purpose: str = _PURPOSE_EMAIL_VERIFICATION,
         hours: int = 1,
     ) -> int:
         """Count tokens created in the last N hours for rate limiting."""
@@ -128,7 +133,7 @@ class VerificationTokenRepository:
             .where(
                 and_(
                     AuthVerificationToken.user_id == user_id,
-                    AuthVerificationToken.purpose == _PURPOSE_EMAIL_VERIFICATION,
+                    AuthVerificationToken.purpose == purpose,
                     AuthVerificationToken.created_at > cutoff,
                 ),
             )
@@ -165,3 +170,67 @@ class RefreshTokenRepository:
         await self.session.flush()
         await self.session.refresh(token)
         return token
+
+    async def find_active_by_hash(
+        self,
+        token_hash: str,
+    ) -> AuthRefreshToken | None:
+        """Find a non-revoked refresh token by its SHA-256 hash."""
+        stmt = (
+            select(AuthRefreshToken)
+            .where(
+                and_(
+                    AuthRefreshToken.token_hash == token_hash,
+                    AuthRefreshToken.revoked_at.is_(None),
+                ),
+            )
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def revoke_token(
+        self,
+        token_id: uuid.UUID,
+        reason: str = "token_rotated",
+    ) -> None:
+        """Revoke a single refresh token."""
+        stmt = (
+            update(AuthRefreshToken)
+            .where(AuthRefreshToken.refresh_token_id == token_id)
+            .values(revoked_at=func.now(), revoke_reason=reason)
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()
+
+    async def revoke_all_user_tokens(
+        self,
+        user_id: uuid.UUID,
+        reason: str = "password_changed",
+    ) -> None:
+        """Revoke all active refresh tokens for a user."""
+        stmt = (
+            update(AuthRefreshToken)
+            .where(
+                and_(
+                    AuthRefreshToken.user_id == user_id,
+                    AuthRefreshToken.revoked_at.is_(None),
+                ),
+            )
+            .values(revoked_at=func.now(), revoke_reason=reason)
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()
+
+    async def update_last_used(
+        self,
+        token_id: uuid.UUID,
+    ) -> None:
+        """Update the last_used_at timestamp on a refresh token."""
+        stmt = (
+            update(AuthRefreshToken)
+            .where(AuthRefreshToken.refresh_token_id == token_id)
+            .values(last_used_at=func.now())
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()

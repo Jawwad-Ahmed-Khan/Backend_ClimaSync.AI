@@ -2,12 +2,13 @@
 
 Provides creation methods used during OTP verification to set up the
 NGO organisation profile and default resource inventory, and lookup
-methods used during login.
+methods used during login. Also supports partial profile updates.
 """
 
 import uuid
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.ngo.models import NgoProfile, NgoResource
@@ -59,3 +60,24 @@ class NgoRepository:
         stmt = select(NgoProfile).where(NgoProfile.ngo_id == ngo_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def update_profile(
+        self,
+        ngo_id: uuid.UUID,
+        **fields: Any,
+    ) -> NgoProfile | None:
+        """Partial update of NGO profile fields. Returns the updated profile."""
+        # Filter out None values — only update fields explicitly provided
+        update_data = {k: v for k, v in fields.items() if v is not None}
+        if not update_data:
+            return await self.get_profile_by_ngo_id(ngo_id)
+
+        stmt = (
+            update(NgoProfile)
+            .where(NgoProfile.ngo_id == ngo_id)
+            .values(**update_data)
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()
+        return await self.get_profile_by_ngo_id(ngo_id)
+

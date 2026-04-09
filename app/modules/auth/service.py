@@ -1,4 +1,5 @@
-"""Auth service — business logic for registration, login, OTP verification, and resend.
+"""Auth service — business logic for registration, login, OTP verification,
+password management, token refresh, logout, and profile operations.
 
 Orchestrates repositories and security utilities. Contains ALL business
 rules and decisions. NEVER imports FastAPI, HTTP concepts, or database
@@ -31,23 +32,34 @@ from app.modules.auth.exceptions import (
     EmailAlreadyVerifiedException,
     EmailNotVerifiedException,
     InvalidCredentialsException,
+    InvalidRefreshTokenException,
+    NoProfileFoundException,
     NoPendingVerificationException,
     OtpExpiredException,
     OtpInvalidException,
     OtpMaxAttemptsException,
     OtpRateLimitException,
+    PasswordMismatchException,
+    PasswordSameAsOldException,
 )
 from app.modules.auth.repository import (
     RefreshTokenRepository,
     VerificationTokenRepository,
 )
 from app.modules.auth.schemas import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
+    LogoutRequest,
+    RefreshTokenRequest,
     RegisterNgoRequest,
     RegisterResponse,
+    ResetPasswordRequest,
     ResendOtpRequest,
+    UpdateProfileRequest,
     UserBasicResponse,
+    UserProfileResponse,
     VerifyOtpRequest,
     VerifyOtpResponse,
 )
@@ -58,10 +70,13 @@ logger = logging.getLogger(__name__)
 
 _ROLE_NGO_USER = "ngo_user"
 _TEMP_REG_PREFIX = "TEMP-"
+_PURPOSE_EMAIL_VERIFICATION = "email_verification"
+_PURPOSE_PASSWORD_RESET = "password_reset"
 
 
 class AuthService:
-    """Handles registration, login, OTP verification, and OTP resend logic."""
+    """Handles registration, login, OTP verification, password management,
+    token refresh, logout, and profile operations."""
 
     def __init__(
         self,
@@ -114,6 +129,7 @@ class AuthService:
             user_id=user.user_id,
             email=data.email,
             org_name=data.org_name,
+            purpose=_PURPOSE_EMAIL_VERIFICATION,
         )
         return RegisterResponse(
             message="Verification OTP sent to your email",
@@ -138,6 +154,7 @@ class AuthService:
             user_id=user.user_id,
             email=data.email,
             org_name=data.org_name,
+            purpose=_PURPOSE_EMAIL_VERIFICATION,
         )
         return RegisterResponse(
             message="Verification OTP sent to your email",
@@ -159,7 +176,9 @@ class AuthService:
         Creates ngo_profile, ngo_resources, and JWT tokens in a single
         transaction (the session commit happens in the dependency).
         """
-        token = await self._token_repo.find_open_token_by_email(data.email)
+        token = await self._token_repo.find_open_token_by_email(
+            data.email, purpose=_PURPOSE_EMAIL_VERIFICATION,
+        )
         if token is None:
             raise NoPendingVerificationException()
 
@@ -329,14 +348,327 @@ class AuthService:
         if user.email_verified:
             raise EmailAlreadyVerifiedException()
 
-        await self._check_otp_rate_limit(user.user_id)
+        await self._check_otp_rate_limit(
+            user.user_id, purpose=_PURPOSE_EMAIL_VERIFICATION,
+        )
 
         await self._revoke_and_send_otp(
             user_id=user.user_id,
             email=data.email,
             org_name="your organisation",
+            purpose=_PURPOSE_EMAIL_VERIFICATION,
         )
         return {"message": "New OTP sent to your email"}
+
+    # ------------------------------------------------------------------
+    # forgot_password
+    # ------------------------------------------------------------------
+
+    async def forgot_password(
+        self,
+        data: ForgotPasswordRequest,
+    ) -> dict[str, str]:
+        """Send password reset OTP to the user's email.
+
+        Anti-enumeration: always returns the same success message
+        regardless of whether the email exists in the system.
+        """
+        user = await self._user_repo.get_by_email(data.email)
+
+        if user is not None and user.email_verified and user.is_active:
+            # Rate limit check
+            await self._check_otp_rate_limit(
+                user.user_id, purpose=_PURPOSE_PASSWORD_RESET,
+            )
+
+            await self._revoke_and_send_otp(
+                user_id=user.user_id,
+                email=data.email,
+                purpose=_PURPOSE_PASSWORD_RESET,
+            )
+            logger.info("Password reset OTP sent: user=%s", user.user_id)
+        else:
+            # Log but don't reveal to the caller that the email doesn't exist
+            logger.info(
+                "Password reset requested for unknown/unverified email: %s",
+                data.email,
+            )
+
+        return {
+            "message": (
+                "If an account with this email exists, "
+                "a password reset code has been sent."
+            ),
+        }
+
+    # ------------------------------------------------------------------
+    # reset_password
+    # ------------------------------------------------------------------
+
+    async def reset_password(
+        self,
+        data: ResetPasswordRequest,
+    ) -> dict[str, str]:
+        """Verify OTP and reset the user's password.
+
+        After success: marks token used, updates password hash,
+        and revokes ALL refresh tokens (forces re-login everywhere).
+        """
+        token = await self._token_repo.find_open_token_by_email(
+            data.email, purpose=_PURPOSE_PASSWORD_RESET,
+        )
+        if token is None:
+            raise NoPendingVerificationException()
+
+        self._validate_token_not_expired(token.expires_at)
+        self._validate_attempts_remaining(
+            token.attempts_count,
+            token.max_attempts,
+        )
+        await self._validate_otp_match(
+            data.otp,
+            token.token_hash,
+            token.verification_token_id,
+        )
+
+        # OTP verified — reset the password
+        await self._token_repo.mark_used(token.verification_token_id)
+
+        new_hash = hash_password(data.new_password)
+        now = datetime.now(timezone.utc)
+        await self._user_repo.update_password(token.user_id, new_hash, now)
+
+        # Force re-login on all devices
+        await self._refresh_repo.revoke_all_user_tokens(
+            token.user_id, reason="password_reset",
+        )
+
+        logger.info("Password reset completed: user=%s", token.user_id)
+
+        return {"message": "Password has been reset successfully. Please log in with your new password."}
+
+    # ------------------------------------------------------------------
+    # change_password
+    # ------------------------------------------------------------------
+
+    async def change_password(
+        self,
+        user_id: uuid.UUID,
+        data: ChangePasswordRequest,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> LoginResponse:
+        """Change password for an authenticated user.
+
+        Validates current password, ensures new != old, updates hash,
+        revokes all existing refresh tokens, and returns fresh tokens
+        for the current session.
+        """
+        user = await self._user_repo.get_by_id(user_id)
+        if user is None:
+            raise InvalidCredentialsException()
+
+        # Verify current password
+        if not self._check_password(data.current_password, user.password_hash):
+            raise PasswordMismatchException()
+
+        # Ensure new password is different
+        if self._check_password(data.new_password, user.password_hash):
+            raise PasswordSameAsOldException()
+
+        # Update password
+        new_hash = hash_password(data.new_password)
+        now = datetime.now(timezone.utc)
+        await self._user_repo.update_password(user_id, new_hash, now)
+
+        # Revoke all existing sessions
+        await self._refresh_repo.revoke_all_user_tokens(
+            user_id, reason="password_changed",
+        )
+
+        # Issue fresh tokens for the current session
+        access_token, refresh_token = self._generate_tokens(
+            user_id, role=user.role,
+        )
+        await self._store_refresh_token(
+            user_id=user_id,
+            refresh_token=refresh_token,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        profile = await self._ngo_repo.get_profile_by_ngo_id(user_id)
+
+        logger.info("Password changed: user=%s", user_id)
+
+        return LoginResponse(
+            message="Password changed successfully",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            user=UserBasicResponse(
+                user_id=user_id,
+                email=user.email,
+                role=user.role,
+                org_name=profile.org_name if profile else "",
+                is_active=user.is_active,
+                email_verified=user.email_verified,
+                verification_status=(
+                    profile.verification_status if profile else "pending"
+                ),
+            ),
+        )
+
+    # ------------------------------------------------------------------
+    # refresh_token
+    # ------------------------------------------------------------------
+
+    async def refresh_token(
+        self,
+        data: RefreshTokenRequest,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> LoginResponse:
+        """Exchange a valid refresh token for a new access + refresh token pair.
+
+        Implements single-use token rotation: the old refresh token is
+        revoked and a new one is issued.
+        """
+        token_hash = hash_token(data.refresh_token)
+        stored_token = await self._refresh_repo.find_active_by_hash(token_hash)
+
+        if stored_token is None:
+            raise InvalidRefreshTokenException()
+
+        # Check expiry
+        if stored_token.expires_at < datetime.now(timezone.utc):
+            await self._refresh_repo.revoke_token(
+                stored_token.refresh_token_id, reason="expired",
+            )
+            raise InvalidRefreshTokenException()
+
+        # Fetch user
+        user = await self._user_repo.get_by_id(stored_token.user_id)
+        if user is None or not user.is_active:
+            raise InvalidRefreshTokenException()
+
+        # Revoke old token (rotation)
+        await self._refresh_repo.revoke_token(
+            stored_token.refresh_token_id, reason="token_rotated",
+        )
+
+        # Issue new pair
+        access_token, new_refresh_token = self._generate_tokens(
+            user.user_id, role=user.role,
+        )
+        await self._store_refresh_token(
+            user_id=user.user_id,
+            refresh_token=new_refresh_token,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+
+        profile = await self._ngo_repo.get_profile_by_ngo_id(user.user_id)
+
+        return LoginResponse(
+            message="Token refreshed successfully",
+            access_token=access_token,
+            refresh_token=new_refresh_token,
+            user=UserBasicResponse(
+                user_id=user.user_id,
+                email=user.email,
+                role=user.role,
+                org_name=profile.org_name if profile else "",
+                is_active=user.is_active,
+                email_verified=user.email_verified,
+                verification_status=(
+                    profile.verification_status if profile else "pending"
+                ),
+            ),
+        )
+
+    # ------------------------------------------------------------------
+    # logout / logout_all
+    # ------------------------------------------------------------------
+
+    async def logout(
+        self,
+        data: LogoutRequest,
+    ) -> dict[str, str]:
+        """Revoke a single refresh token (logout current session)."""
+        token_hash = hash_token(data.refresh_token)
+        stored_token = await self._refresh_repo.find_active_by_hash(token_hash)
+
+        if stored_token is not None:
+            await self._refresh_repo.revoke_token(
+                stored_token.refresh_token_id, reason="user_logout",
+            )
+            logger.info("Logout: user=%s", stored_token.user_id)
+
+        # Always return success (don't reveal if token was valid)
+        return {"message": "Logged out successfully"}
+
+    async def logout_all(
+        self,
+        user_id: uuid.UUID,
+    ) -> dict[str, str]:
+        """Revoke all refresh tokens for a user (logout everywhere)."""
+        await self._refresh_repo.revoke_all_user_tokens(
+            user_id, reason="user_logout_all",
+        )
+        logger.info("Logout all sessions: user=%s", user_id)
+        return {"message": "All sessions have been logged out"}
+
+    # ------------------------------------------------------------------
+    # get_me / update_profile
+    # ------------------------------------------------------------------
+
+    async def get_me(
+        self,
+        user_id: uuid.UUID,
+    ) -> UserProfileResponse:
+        """Return the full profile for the authenticated user."""
+        user = await self._user_repo.get_by_id(user_id)
+        if user is None:
+            raise InvalidCredentialsException()
+
+        profile = await self._ngo_repo.get_profile_by_ngo_id(user_id)
+        if profile is None:
+            raise NoProfileFoundException()
+
+        return UserProfileResponse(
+            user_id=user.user_id,
+            email=user.email,
+            role=user.role,
+            is_active=user.is_active,
+            email_verified=user.email_verified,
+            org_name=profile.org_name,
+            head_of_operations=profile.head_of_operations,
+            phone=profile.phone,
+            website=profile.website,
+            base_city=profile.base_city,
+            base_district=profile.base_district,
+            base_province=profile.base_province,
+            verification_status=profile.verification_status,
+            last_login_at=user.last_login_at,
+        )
+
+    async def update_profile(
+        self,
+        user_id: uuid.UUID,
+        data: UpdateProfileRequest,
+    ) -> UserProfileResponse:
+        """Update the NGO profile for the authenticated user."""
+        profile = await self._ngo_repo.get_profile_by_ngo_id(user_id)
+        if profile is None:
+            raise NoProfileFoundException()
+
+        # Extract only fields that were explicitly set (not None)
+        update_fields = data.model_dump(exclude_unset=True)
+        if update_fields:
+            await self._ngo_repo.update_profile(user_id, **update_fields)
+
+        # Return the full updated profile
+        return await self.get_me(user_id)
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -347,10 +679,11 @@ class AuthService:
         *,
         user_id: uuid.UUID,
         email: str,
-        org_name: str,
+        org_name: str | None = None,
+        purpose: str = _PURPOSE_EMAIL_VERIFICATION,
     ) -> None:
         """Revoke old tokens, create a new one, and send the OTP email."""
-        await self._token_repo.revoke_open_tokens(user_id)
+        await self._token_repo.revoke_open_tokens(user_id, purpose=purpose)
 
         otp_plain = generate_otp()
         otp_hashed = hash_otp(otp_plain)
@@ -364,10 +697,15 @@ class AuthService:
             token_hash=otp_hashed,
             expires_at=expires_at,
             max_attempts=settings.OTP_MAX_ATTEMPTS,
+            purpose=purpose,
         )
 
-        from app.modules.auth.email import send_otp_email
-        await send_otp_email(email, otp_plain, org_name)
+        if purpose == _PURPOSE_PASSWORD_RESET:
+            from app.modules.auth.email import send_password_reset_email
+            await send_password_reset_email(email, otp_plain)
+        else:
+            from app.modules.auth.email import send_otp_email
+            await send_otp_email(email, otp_plain, org_name or "your organisation")
 
     def _validate_token_not_expired(self, expires_at: datetime) -> None:
         """Raise if the token has expired."""
@@ -433,9 +771,12 @@ class AuthService:
     async def _check_otp_rate_limit(
         self,
         user_id: uuid.UUID,
+        purpose: str = _PURPOSE_EMAIL_VERIFICATION,
     ) -> None:
         """Enforce max OTPs per hour rate limit."""
-        recent_count = await self._token_repo.count_recent_tokens(user_id)
+        recent_count = await self._token_repo.count_recent_tokens(
+            user_id, purpose=purpose,
+        )
         if recent_count >= settings.OTP_RATE_LIMIT_PER_HOUR:
             raise OtpRateLimitException()
 
@@ -457,3 +798,4 @@ class AuthService:
 def _generate_temp_registration_number() -> str:
     """Generate a temporary registration number: TEMP-XXXXXXXX."""
     return f"{_TEMP_REG_PREFIX}{uuid.uuid4().hex[:8].upper()}"
+

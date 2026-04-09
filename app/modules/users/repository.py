@@ -1,6 +1,7 @@
 """User repository — data access for the users table.
 
-Provides query methods needed by the auth service during registration.
+Provides query methods needed by the auth service during registration,
+login, and password management.
 """
 
 import uuid
@@ -18,6 +19,17 @@ class UserRepository:
     def __init__(self, session: AsyncSession) -> None:
         """Initialise with async session."""
         self.session = session
+
+    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
+        """Retrieve a user by primary key (non-deleted only)."""
+        stmt = select(User).where(
+            and_(
+                User.user_id == user_id,
+                User.deleted_at.is_(None),
+            ),
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def get_by_email(self, email: str) -> User | None:
         """Find an active (non-deleted) user by email."""
@@ -78,3 +90,22 @@ class UserRepository:
         )
         await self.session.execute(stmt)
         await self.session.flush()
+
+    async def update_password(
+        self,
+        user_id: uuid.UUID,
+        new_hash: str,
+        changed_at: datetime,
+    ) -> None:
+        """Update a user's password hash and password_changed_at timestamp."""
+        stmt = (
+            update(User)
+            .where(User.user_id == user_id)
+            .values(
+                password_hash=new_hash,
+                password_changed_at=changed_at,
+            )
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()
+
