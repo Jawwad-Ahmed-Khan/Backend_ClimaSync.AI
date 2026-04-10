@@ -44,6 +44,15 @@ class NotificationService:
         Your registration code is: {raw_otp}. 
         Enter this to activate your disaster response portal.
         """
+        # Save OTP to a file for Playwright E2E testing to pick up
+        import os
+        testing_file = os.path.join(os.path.dirname(__file__), "../../../../front-end-ClimasyncAI/.latest_otp.txt")
+        try:
+            with open(testing_file, "w") as f:
+                f.write(raw_otp)
+        except Exception as e:
+            pass
+            
         await cls.dispatch_platform_alert(email, subject, body)
 
     @classmethod

@@ -62,6 +62,7 @@ def _register_routers(app: FastAPI) -> None:
     from app.modules.social.controller import router as social_router
     from app.modules.tasks.controller import router as tasks_router
     from app.modules.resources.controller import router as resources_router
+    from app.modules.notifications.controller import router as notifications_router
     
     from fastapi import Depends
     from app.core.kill_switch import require_module_active
@@ -75,6 +76,7 @@ def _register_routers(app: FastAPI) -> None:
     app.include_router(social_router, prefix=prefix, dependencies=[Depends(require_module_active("social"))])
     app.include_router(tasks_router, prefix=prefix, dependencies=[Depends(require_module_active("tasks"))])
     app.include_router(resources_router, prefix=prefix, dependencies=[Depends(require_module_active("resources"))])
+    app.include_router(notifications_router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])
     async def health_check() -> JSONResponse:
