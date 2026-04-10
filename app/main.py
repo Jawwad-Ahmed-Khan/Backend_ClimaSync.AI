@@ -62,16 +62,19 @@ def _register_routers(app: FastAPI) -> None:
     from app.modules.social.controller import router as social_router
     from app.modules.tasks.controller import router as tasks_router
     from app.modules.resources.controller import router as resources_router
+    
+    from fastapi import Depends
+    from app.core.kill_switch import require_module_active
 
     prefix = settings.API_V1_PREFIX
 
-    app.include_router(auth_router, prefix=prefix)
-    app.include_router(disasters_router, prefix=prefix)
-    app.include_router(alerts_router, prefix=prefix)
-    app.include_router(admin_router, prefix=prefix)
-    app.include_router(social_router, prefix=prefix)
-    app.include_router(tasks_router, prefix=prefix)
-    app.include_router(resources_router, prefix=prefix)
+    app.include_router(auth_router, prefix=prefix, dependencies=[Depends(require_module_active("auth"))])
+    app.include_router(disasters_router, prefix=prefix, dependencies=[Depends(require_module_active("disasters"))])
+    app.include_router(alerts_router, prefix=prefix, dependencies=[Depends(require_module_active("disasters"))])
+    app.include_router(admin_router, prefix=prefix, dependencies=[Depends(require_module_active("admin"))])
+    app.include_router(social_router, prefix=prefix, dependencies=[Depends(require_module_active("social"))])
+    app.include_router(tasks_router, prefix=prefix, dependencies=[Depends(require_module_active("tasks"))])
+    app.include_router(resources_router, prefix=prefix, dependencies=[Depends(require_module_active("resources"))])
 
     @app.get("/health", tags=["Health"])
     async def health_check() -> JSONResponse:

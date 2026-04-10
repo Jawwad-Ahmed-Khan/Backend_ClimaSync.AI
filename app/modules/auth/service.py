@@ -701,11 +701,11 @@ class AuthService:
         )
 
         if purpose == _PURPOSE_PASSWORD_RESET:
-            from app.modules.auth.email import send_password_reset_email
-            await send_password_reset_email(email, otp_plain)
+            from app.common.services.notification_service import NotificationService
+            await NotificationService.dispatch_password_recovery(email, otp_plain)
         else:
-            from app.modules.auth.email import send_otp_email
-            await send_otp_email(email, otp_plain, org_name or "your organisation")
+            from app.common.services.notification_service import NotificationService
+            await NotificationService.dispatch_otp_verification(email, otp_plain, org_name or "your organisation")
 
     def _validate_token_not_expired(self, expires_at: datetime) -> None:
         """Raise if the token has expired."""
@@ -738,15 +738,9 @@ class AuthService:
         *,
         role: str,
     ) -> tuple[str, str]:
-        """Create JWT access and refresh token pair.
-
-        The role is read from the user record so that both ngo_user and
-        admin logins produce correctly scoped tokens without code changes.
-        """
-        subject = str(user_id)
-        access = create_access_token(subject, {"role": role})
-        refresh = create_refresh_token(subject)
-        return access, refresh
+        """Create JWT access and refresh token pair via centralized generator."""
+        from app.common.services.jwt_service import JwtService
+        return JwtService.generate_tokens(user_id, role)
 
     async def _store_refresh_token(
         self,

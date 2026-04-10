@@ -12,7 +12,9 @@ from app.modules.admin.repository import (
     AdminReportRepository,
     AuditLogRepository,
 )
-from app.modules.admin.service import AdminService
+from app.modules.admin.services.ngo_service import AdminNgoService
+from app.modules.admin.services.report_service import AdminReportService
+from app.modules.admin.services.audit_service import AdminAuditService
 from app.modules.auth.dependencies import get_current_user
 from app.modules.ngo.repository import NgoRepository
 from app.modules.users.models import User
@@ -38,20 +40,27 @@ def get_ngo_repository(session: Annotated[AsyncSession, Depends(get_db)]) -> Ngo
     return NgoRepository(session)
 
 
-def get_admin_service(
-    profile_repo: Annotated[AdminProfileRepository, Depends(get_admin_profile_repository)],
-    audit_repo: Annotated[AuditLogRepository, Depends(get_audit_log_repository)],
-    report_repo: Annotated[AdminReportRepository, Depends(get_admin_report_repository)],
+def get_admin_ngo_service(
     ngo_admin_repo: Annotated[AdminNgoRepository, Depends(get_admin_ngo_repository)],
     ngo_repo: Annotated[NgoRepository, Depends(get_ngo_repository)],
-) -> AdminService:
-    return AdminService(
-        profile_repo=profile_repo,
-        audit_repo=audit_repo,
-        report_repo=report_repo,
+    audit_repo: Annotated[AuditLogRepository, Depends(get_audit_log_repository)],
+) -> AdminNgoService:
+    from app.modules.admin.services.audit_service import AdminAuditService
+    return AdminNgoService(
         ngo_admin_repo=ngo_admin_repo,
         ngo_repo=ngo_repo,
+        audit_service=AdminAuditService(audit_repo),
     )
+
+def get_admin_report_service(
+    report_repo: Annotated[AdminReportRepository, Depends(get_admin_report_repository)],
+) -> AdminReportService:
+    return AdminReportService(report_repo)
+
+def get_admin_audit_service(
+    audit_repo: Annotated[AuditLogRepository, Depends(get_audit_log_repository)],
+) -> AdminAuditService:
+    return AdminAuditService(audit_repo)
 
 
 async def get_current_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
@@ -61,5 +70,7 @@ async def get_current_admin(current_user: Annotated[User, Depends(get_current_us
     return current_user
 
 
-AdminServiceDep = Annotated[AdminService, Depends(get_admin_service)]
+AdminNgoServiceDep = Annotated[AdminNgoService, Depends(get_admin_ngo_service)]
+AdminReportServiceDep = Annotated[AdminReportService, Depends(get_admin_report_service)]
+AdminAuditServiceDep = Annotated[AdminAuditService, Depends(get_admin_audit_service)]
 CurrentAdminDep = Annotated[User, Depends(get_current_admin)]

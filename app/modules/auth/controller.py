@@ -9,7 +9,11 @@ from fastapi import APIRouter, Request
 
 from app.common.base_schemas import MessageResponse
 from app.core.limiter import limiter
-from app.modules.auth.dependencies import AuthServiceDep, CurrentUserDep
+from app.modules.auth.dependencies import (
+    AuthServiceDep,
+    AuthProfileServiceDep,
+    CurrentActiveUserDep,
+)
 from app.modules.auth.schemas import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
@@ -191,7 +195,7 @@ async def refresh_token(
 async def change_password(
     data: ChangePasswordRequest,
     request: Request,
-    current_user: CurrentUserDep,
+    current_user: CurrentActiveUserDep,
     service: AuthServiceDep,
 ) -> LoginResponse:
     """Change password for the authenticated user."""
@@ -210,7 +214,7 @@ async def change_password(
 )
 async def logout(
     data: LogoutRequest,
-    current_user: CurrentUserDep,
+    current_user: CurrentActiveUserDep,
     service: AuthServiceDep,
 ) -> MessageResponse:
     """Logout by revoking the refresh token."""
@@ -225,7 +229,7 @@ async def logout(
     description="Revokes all refresh tokens for the authenticated user.",
 )
 async def logout_all(
-    current_user: CurrentUserDep,
+    current_user: CurrentActiveUserDep,
     service: AuthServiceDep,
 ) -> MessageResponse:
     """Logout from all sessions."""
@@ -240,10 +244,10 @@ async def logout_all(
     description="Returns the full profile of the authenticated user including NGO details.",
 )
 async def get_me(
-    current_user: CurrentUserDep,
-    service: AuthServiceDep,
-) -> UserProfileResponse:
-    """Get the current user's profile."""
+    current_user: CurrentActiveUserDep,
+    service: AuthProfileServiceDep,
+):
+    """Retrieve full profile information for the actively authenticated user."""
     return await service.get_me(current_user.user_id)
 
 
@@ -258,9 +262,8 @@ async def get_me(
 )
 async def update_profile(
     data: UpdateProfileRequest,
-    current_user: CurrentUserDep,
-    service: AuthServiceDep,
-) -> UserProfileResponse:
-    """Update the current user's profile."""
+    current_user: CurrentActiveUserDep,
+    service: AuthProfileServiceDep,
+):
+    """Update profile attributes."""
     return await service.update_profile(current_user.user_id, data)
-

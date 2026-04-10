@@ -9,7 +9,12 @@ from typing import Literal
 from fastapi import APIRouter, Path, Query, Request
 
 from app.core.limiter import limiter
-from app.modules.admin.dependencies import AdminServiceDep, CurrentAdminDep
+from app.modules.admin.dependencies import (
+    AdminNgoServiceDep,
+    AdminReportServiceDep,
+    AdminAuditServiceDep,
+    CurrentAdminDep,
+)
 from app.modules.admin.schemas import (
     AdminReportResponse,
     AuditLogResponse,
@@ -41,7 +46,7 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 )
 async def list_ngos(
     current_admin: CurrentAdminDep,
-    service: AdminServiceDep,
+    service: AdminNgoServiceDep,
     status: Literal["pending", "verified", "rejected", "suspended"] | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -59,7 +64,7 @@ async def verify_ngo(
     request: Request,
     data: NgoVerificationUpdate,
     current_admin: CurrentAdminDep,
-    service: AdminServiceDep,
+    service: AdminNgoServiceDep,
     ngo_id: uuid.UUID = Path(...),
 ):
     """Approve, Reject, or Suspend an NGO."""
@@ -79,7 +84,7 @@ async def verify_ngo(
 )
 async def get_audit_logs(
     current_admin: CurrentAdminDep,
-    service: AdminServiceDep,
+    service: AdminAuditServiceDep,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
@@ -97,7 +102,7 @@ async def get_audit_logs(
 async def generate_global_report(
     request: Request,
     current_admin: CurrentAdminDep,
-    service: AdminServiceDep,
+    service: AdminReportServiceDep,
 ):
     """Get metrics and system aggregate stats."""
     return await service.generate_global_report()

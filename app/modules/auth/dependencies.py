@@ -21,6 +21,7 @@ from app.modules.auth.repository import (
     VerificationTokenRepository,
 )
 from app.modules.auth.service import AuthService
+from app.modules.auth.services.profile_service import AuthProfileService
 from app.modules.ngo.repository import NgoRepository
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
@@ -114,3 +115,12 @@ async def get_current_user(
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
+
+def get_auth_profile_service(
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+    ngo_repo: Annotated[NgoRepository, Depends(get_ngo_repository)],
+) -> AuthProfileService:
+    return AuthProfileService(user_repo=user_repo, ngo_repo=ngo_repo)
+
+AuthProfileServiceDep = Annotated[AuthProfileService, Depends(get_auth_profile_service)]
+CurrentActiveUserDep = Annotated[User, Depends(get_current_user)]

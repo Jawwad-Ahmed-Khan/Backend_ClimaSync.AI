@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 import pytest
-import app.modules.auth.email  # Ensure the module is loaded for patching
+import app.common.services.notification_service
 from app.modules.auth.exceptions import (
     EmailAlreadyRegisteredException,
     OtpRateLimitException,
@@ -92,14 +92,14 @@ async def test_register_ngo_success_new_user(
         password="securepassword123",
     )
 
-    with patch("app.modules.auth.email.send_otp_email", new_callable=AsyncMock) as send_otp_mock:
+    with patch("app.common.services.notification_service.NotificationService.dispatch_otp_verification", new_callable=AsyncMock) as send_otp_mock:
         response = await auth_service.register_ngo(data)
 
         assert response.email == "new@example.com"
         assert response.message == "Verification OTP sent to your email"
         
         mock_user_repo.create_user.assert_called_once()
-        mock_token_repo.revoke_open_tokens.assert_called_once_with(new_user_mock.user_id)
+        mock_token_repo.revoke_open_tokens.assert_called_once_with(new_user_mock.user_id, purpose="email_verification")
         mock_token_repo.create_token.assert_called_once()
         send_otp_mock.assert_called_once()
 
@@ -121,7 +121,7 @@ async def test_resend_otp_rate_limit(
     with pytest.raises(OtpRateLimitException):
         await auth_service.resend_otp(data)
         
-    mock_token_repo.count_recent_tokens.assert_called_once_with(user_mock.user_id)
+    mock_token_repo.count_recent_tokens.assert_called_once_with(user_mock.user_id, purpose="email_verification")
 
 
 @pytest.mark.asyncio

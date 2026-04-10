@@ -57,6 +57,15 @@ class Settings(BaseSettings):
     # --- CORS ---
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
+    # --- Microservice Kill Switches ---
+    MODULE_AUTH_ENABLED: bool = True
+    MODULE_ADMIN_ENABLED: bool = True
+    MODULE_TASKS_ENABLED: bool = True
+    MODULE_DISASTERS_ENABLED: bool = True
+    MODULE_RESOURCES_ENABLED: bool = True
+    MODULE_SOCIAL_ENABLED: bool = True
+    MODULE_NGO_ENABLED: bool = True
+
     @field_validator("ENVIRONMENT")
     @classmethod
     def validate_environment(cls, value: str) -> str:
