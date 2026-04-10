@@ -61,6 +61,7 @@ def _register_routers(app: FastAPI) -> None:
     from app.modules.admin.controller import router as admin_router
     from app.modules.social.controller import router as social_router
     from app.modules.tasks.controller import router as tasks_router
+    from app.modules.resources.controller import router as resources_router
 
     prefix = settings.API_V1_PREFIX
 
@@ -70,6 +71,7 @@ def _register_routers(app: FastAPI) -> None:
     app.include_router(admin_router, prefix=prefix)
     app.include_router(social_router, prefix=prefix)
     app.include_router(tasks_router, prefix=prefix)
+    app.include_router(resources_router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])
     async def health_check() -> JSONResponse:
