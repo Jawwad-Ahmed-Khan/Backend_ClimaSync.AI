@@ -10,13 +10,13 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.common.base_model import BaseModel
+from app.core.database import Base
 
 
 
 
 
-class NGOSpecialization(BaseModel):
+class NGOSpecialization(Base):
     """Tag array of what disciplines the NGO serves."""
 
     __tablename__ = "ngo_specializations"
@@ -31,7 +31,7 @@ class NGOSpecialization(BaseModel):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
 
-class NGOOperationalArea(BaseModel):
+class NGOOperationalArea(Base):
     """District/Province zones an NGO agrees to operate within."""
 
     __tablename__ = "ngo_operational_areas"
