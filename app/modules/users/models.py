@@ -74,8 +74,21 @@ class User(BaseModel, SoftDeleteMixin):
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    refresh_tokens: Mapped[list[AuthRefreshToken]] = relationship(
+    refresh_tokens: Mapped[list["AuthRefreshToken"]] = relationship(
         "AuthRefreshToken",
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+    admin_profile: Mapped["AdminProfile"] = relationship(
+        "AdminProfile",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+        foreign_keys="AdminProfile.admin_id",
+    )
+    audit_logs: Mapped[list["AuditLog"]] = relationship(
+        "AuditLog",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="AuditLog.user_id",
     )
