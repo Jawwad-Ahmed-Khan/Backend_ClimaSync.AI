@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     """Application settings parsed from environment variables and .env file."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", ".env.local"),
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",

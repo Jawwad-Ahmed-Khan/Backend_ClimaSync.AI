@@ -43,6 +43,6 @@
 
 ## T7: Git & Verification
 - [x] Syntax checks pass for all modified files
-- [ ] Commit to `feature/login` branch
-- [ ] Merge to `Develop`
-- [ ] Push to origin
+- [x] Commit to `feature/login` branch (`22b8c77`)
+- [x] Merge to `Develop` (`ab0d097`)
+- [x] Push to origin (all branches synced)

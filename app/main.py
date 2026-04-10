@@ -56,10 +56,14 @@ def create_app() -> FastAPI:
 def _register_routers(app: FastAPI) -> None:
     """Mount all module routers with the API version prefix."""
     from app.modules.auth.controller import router as auth_router
+    from app.modules.disasters.controller import router as disasters_router
+    from app.modules.disasters.controller import alerts_router
 
     prefix = settings.API_V1_PREFIX
 
     app.include_router(auth_router, prefix=prefix)
+    app.include_router(disasters_router, prefix=prefix)
+    app.include_router(alerts_router, prefix=prefix)
 
     @app.get("/health", tags=["Health"])
     async def health_check() -> JSONResponse:
