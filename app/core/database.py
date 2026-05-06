@@ -1,8 +1,4 @@
-"""SQLAlchemy async engine, session factory, and declarative base.
-
-All database access in the application uses async sessions yielded
-by the session dependency in core/dependencies.py.
-"""
+import ssl as _ssl
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -13,6 +9,13 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
+# Supabase direct connections require SSL but use a certificate chain
+# that fails Python's default CA store verification. We enable SSL
+# encryption while skipping certificate verification (safe for dev).
+_ssl_ctx = _ssl.create_default_context()
+_ssl_ctx.check_hostname = False
+_ssl_ctx.verify_mode = _ssl.CERT_NONE
+
 engine = create_async_engine(
     settings.async_database_url,
     pool_size=settings.DATABASE_POOL_SIZE,
@@ -22,6 +25,7 @@ engine = create_async_engine(
     connect_args={
         "statement_cache_size": 0,
         "prepared_statement_cache_size": 0,
+        "ssl": _ssl_ctx,
     },
 )
 

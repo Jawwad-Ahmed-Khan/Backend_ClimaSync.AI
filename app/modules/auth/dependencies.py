@@ -27,6 +27,7 @@ from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 
 def get_user_repository(
@@ -114,6 +115,32 @@ async def get_current_user(
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
+
+
+async def get_optional_user(
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)],
+    user_repo: Annotated[UserRepository, Depends(get_user_repository)],
+) -> User | None:
+    """Return the authenticated User if a valid token is provided, else None.
+
+    Used for public endpoints that show richer data to logged-in users.
+    """
+    if token is None:
+        return None
+    try:
+        payload = decode_token(token)
+        subject = payload.get("sub")
+        token_type = payload.get("type")
+        if subject is None or token_type != "access":
+            return None
+        user_id = uuid.UUID(subject)
+        user = await user_repo.get_by_id(user_id)
+        return user if (user and user.is_active) else None
+    except Exception:
+        return None
+
+
+OptionalUserDep = Annotated[User | None, Depends(get_optional_user)]
 
 
 def get_auth_profile_service(

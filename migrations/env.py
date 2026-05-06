@@ -18,6 +18,12 @@ from app.core.database import Base
 from app.modules.users.models import User  # noqa: F401
 from app.modules.auth.models import AuthVerificationToken, AuthRefreshToken  # noqa: F401
 from app.modules.ngo.models import NgoProfile, NgoResource  # noqa: F401
+import app.modules.admin.models  # noqa: F401
+import app.modules.disasters.models  # noqa: F401
+import app.modules.notifications.models  # noqa: F401
+import app.modules.resources.models  # noqa: F401
+import app.modules.social.models  # noqa: F401
+import app.modules.tasks.models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
@@ -27,6 +33,10 @@ config.set_main_option("sqlalchemy.url", settings.async_database_url)
 
 target_metadata = Base.metadata
 
+def include_object(object, name, type_, reflected, compare_to):
+    if type_ == "table" and reflected and compare_to is None:
+        return False
+    return True
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode (generates SQL without DB connection)."""
@@ -36,7 +46,14 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
+    with context.begin_transaction():
+        context.run_migrations()
+
+def do_run_migrations(connection: object) -> None:
+    """Run migrations against the provided connection."""
+    context.configure(connection=connection, target_metadata=target_metadata, include_object=include_object)  # type: ignore[arg-type]
     with context.begin_transaction():
         context.run_migrations()
 
@@ -54,6 +71,10 @@ async def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={
+            "statement_cache_size": 0,
+            "prepared_statement_cache_size": 0,
+        },
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

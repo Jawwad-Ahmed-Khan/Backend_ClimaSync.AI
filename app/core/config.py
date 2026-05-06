@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     # --- CORS ---
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
+    # --- AI Agents ---
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_TIMEOUT_SECONDS: int = 60
+    DATA_COLLECTION_BASE_URL: str = "http://localhost:8000"
+
     # --- Microservice Kill Switches ---
     MODULE_AUTH_ENABLED: bool = True
     MODULE_ADMIN_ENABLED: bool = True
@@ -65,6 +71,7 @@ class Settings(BaseSettings):
     MODULE_RESOURCES_ENABLED: bool = True
     MODULE_SOCIAL_ENABLED: bool = True
     MODULE_NGO_ENABLED: bool = True
+    MODULE_AGENTS_ENABLED: bool = True
 
     @field_validator("ENVIRONMENT")
     @classmethod

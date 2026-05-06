@@ -10,7 +10,7 @@ from fastapi import APIRouter, Path, Query, Request
 
 from app.common.base_schemas import MessageResponse
 from app.core.limiter import limiter
-from app.modules.auth.dependencies import CurrentUserDep
+from app.modules.auth.dependencies import CurrentUserDep, OptionalUserDep
 from app.modules.disasters.dependencies import DisasterServiceDep
 from app.modules.disasters.schemas import (
     AlertCreate,
@@ -51,8 +51,8 @@ async def create_alert(
     summary="List active alerts",
 )
 async def list_alerts(
-    current_user: CurrentUserDep,
     service: DisasterServiceDep,
+    _current_user: OptionalUserDep = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[AlertResponse]:
@@ -111,8 +111,8 @@ async def create_event(
     summary="List active disaster events",
 )
 async def list_events(
-    current_user: CurrentUserDep,
     service: DisasterServiceDep,
+    _current_user: OptionalUserDep = None,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[DisasterEventResponse]:
