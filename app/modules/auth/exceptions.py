@@ -19,6 +19,14 @@ class EmailAlreadyRegisteredException(AlreadyExistsException):
         super().__init__(resource="Email", identifier="already registered")
 
 
+class EmailDomainInvalidException(ValidationException):
+    """Raised when the email domain is undeliverable or nonexistent."""
+
+    def __init__(self) -> None:
+        super().__init__(detail="The provided email domain does not exist or cannot receive mail.")
+
+
+
 class OtpExpiredException(ValidationException):
     """Raised when the OTP has passed its expiry time."""
 

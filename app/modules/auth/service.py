@@ -41,6 +41,7 @@ from app.modules.auth.exceptions import (
     OtpRateLimitException,
     PasswordMismatchException,
     PasswordSameAsOldException,
+    EmailDomainInvalidException,
 )
 from app.modules.auth.repository import (
     RefreshTokenRepository,
@@ -104,6 +105,12 @@ class AuthService:
         Handles the case where an unverified user re-registers with
         the same email by reusing the existing user and resending OTP.
         """
+        from email_validator import validate_email, EmailUndeliverableError
+        try:
+            validate_email(data.email, check_deliverability=True)
+        except EmailUndeliverableError:
+            raise EmailDomainInvalidException()
+
         existing_user = await self._user_repo.get_by_email(data.email)
 
         if existing_user is not None:
