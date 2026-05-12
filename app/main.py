@@ -64,8 +64,9 @@ def _register_routers(app: FastAPI) -> None:
     from app.modules.resources.controller import router as resources_router
     from app.modules.notifications.controller import router as notifications_router
     
-    from fastapi import Depends
+    from fastapi import Depends, WebSocket, WebSocketDisconnect
     from app.core.kill_switch import require_module_active
+    from app.websockets.manager import ws_manager
 
     prefix = settings.API_V1_PREFIX
 
@@ -87,6 +88,17 @@ def _register_routers(app: FastAPI) -> None:
                 "version": settings.APP_VERSION,
             },
         )
+
+    @app.websocket("/ws/alerts")
+    async def websocket_alerts_endpoint(websocket: WebSocket):
+        await ws_manager.connect(websocket)
+        try:
+            while True:
+                # The backend just listens to keep the connection alive.
+                # The frontend doesn't need to send messages here, it only receives.
+                data = await websocket.receive_text()
+        except WebSocketDisconnect:
+            ws_manager.disconnect(websocket)
 
 
 def _configure_logging() -> None:

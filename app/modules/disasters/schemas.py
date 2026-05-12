@@ -140,3 +140,37 @@ class DisasterEventResponse(DisasterEventBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- Incoming Data Schema ---
+
+class IncomingBreachPayload(BaseModel):
+    # Core Identifiers
+    breach_id: str = Field(..., description="Unique UUID from the Collection Database")
+    source_api: str = Field(..., description="'usgs', 'open_meteo', or 'google_flood_hub'")
+    disaster_kind: str = Field(..., description="'earthquake', 'flood', 'heatwave', 'heavy_rain', etc.")
+    
+    # Location Data
+    location_name: str | None = Field(default=None, description="Human readable city/district name")
+    district: str | None = Field(default=None, description="Pakistan district")
+    province: str | None = Field(default=None, description="Pakistan province enum string")
+    latitude: float = Field(..., description="Latitude coordinate")
+    longitude: float = Field(..., description="Longitude coordinate")
+    
+    # Metrics
+    metric_name: str = Field(..., description="The type of reading (e.g., 'magnitude', 'temp_max_c')")
+    observed_value: float = Field(..., description="The actual reading or forecasted value")
+    threshold_value: float = Field(..., description="The limit that was crossed")
+    unit: str = Field(..., description="Unit of measurement ('richter', 'celsius', 'mm', 'percent')")
+    breach_severity: str = Field(..., description="'watch', 'warning', 'emergency', or 'extreme'")
+    
+    # Timing
+    observation_time: datetime = Field(..., description="When the event happens (or is forecasted to happen)")
+    detected_at: datetime = Field(..., description="When the collection service detected the breach")
+    is_forecast: bool = Field(default=False, description="True if this is a future prediction")
+    forecast_horizon_h: int | None = Field(default=None, description="Hours in the future (if is_forecast is true)")
+    
+    # Specific API Foreign Keys (At least one will be present depending on source_api)
+    seismic_event_id: str | None = Field(default=None, description="USGS specific event ID")
+    weather_location_id: str | None = Field(default=None, description="Open-Meteo internal location ID")
+    gauge_id: str | None = Field(default=None, description="Google Flood Hub specific river gauge ID")

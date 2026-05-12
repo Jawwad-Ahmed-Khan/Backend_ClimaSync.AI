@@ -5,8 +5,10 @@ response shaping, and status codes.
 """
 
 import uuid
+import logging
+from decimal import Decimal
 
-from fastapi import APIRouter, Path, Query, Request
+from fastapi import APIRouter, Path, Query, Request, Header, HTTPException, status
 
 from app.common.base_schemas import MessageResponse
 from app.core.limiter import limiter
@@ -19,13 +21,84 @@ from app.modules.disasters.schemas import (
     DisasterEventCreate,
     DisasterEventResponse,
     DisasterEventUpdate,
+    IncomingBreachPayload,
+    DisasterType,
+    AlertSourceEnum,
 )
+from app.websockets.manager import ws_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/disasters", tags=["Disasters"])
 alerts_router = APIRouter(prefix="/alerts", tags=["Alerts"])
 
+EXPECTED_API_KEY = "your_secret_key_here"
+
+
 
 # --- Alerts Endpoints ---
+
+@alerts_router.post(
+    "/incoming",
+    status_code=status.HTTP_201_CREATED,
+    summary="Receive incoming breach payload from Data Collection Service"
+)
+async def receive_incoming_alert(
+    payload: IncomingBreachPayload,
+    service: DisasterServiceDep,
+    x_api_key: str = Header(None)
+):
+    if x_api_key and x_api_key != EXPECTED_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API Key")
+
+    try:
+        # 1. Map to AlertCreate
+        try:
+            mapped_disaster_kind = DisasterType(payload.disaster_kind.lower())
+        except ValueError:
+            mapped_disaster_kind = DisasterType.flood  # Default if unknown
+            for t in DisasterType:
+                if t.value == payload.disaster_kind.lower():
+                    mapped_disaster_kind = t
+                    break
+
+        severity_map = {
+            "watch": Decimal("3.0"),
+            "warning": Decimal("5.0"),
+            "emergency": Decimal("8.0"),
+            "extreme": Decimal("10.0")
+        }
+        severity_score = severity_map.get(payload.breach_severity.lower(), Decimal("5.0"))
+
+        alert_create = AlertCreate(
+            external_ref_id=payload.breach_id,
+            alert_type=mapped_disaster_kind,
+            title=f"{payload.disaster_kind.capitalize()} Alert: {payload.location_name or 'Unknown Location'}",
+            description=f"Observed: {payload.observed_value} {payload.unit} (Threshold: {payload.threshold_value})",
+            source_type=AlertSourceEnum.sensor,
+            source_name=payload.source_api,
+            location=f"POINT({payload.longitude} {payload.latitude})",
+            location_name=payload.location_name,
+            district=payload.district,
+            province=payload.province,
+            severity_score=severity_score
+        )
+
+        # 2. Save to Main Database
+        await service.create_alert(alert_create, None)
+
+        # 3. Broadcast to Frontend via WebSockets
+        await ws_manager.broadcast_alert(payload.model_dump(mode='json'))
+
+        return {
+            "status": "success",
+            "alert_id": payload.breach_id,
+            "message": "Alert received and broadcasted"
+        }
+    except Exception as e:
+        logger.error(f"Error processing incoming alert: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @alerts_router.post(
     "",
