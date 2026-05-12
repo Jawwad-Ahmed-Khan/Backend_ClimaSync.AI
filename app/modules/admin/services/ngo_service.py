@@ -56,3 +56,10 @@ class AdminNgoService:
         )
 
         return updated_ngo
+
+    async def get_ngo_details(self, ngo_id: uuid.UUID) -> dict:
+        """Get detailed NGO profile with resources and performance."""
+        result = await self.ngo_admin_repo.get_ngo_detailed(ngo_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="NGO profile not found")
+        return result

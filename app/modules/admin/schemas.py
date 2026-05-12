@@ -74,3 +74,119 @@ class AdminReportResponse(BaseModel):
     active_alerts_count: int
     active_disasters_count: int
     disaster_metrics: list[DisasterMetricsResponse] = []
+
+
+# --- Dashboard Stats (NEW) ---
+
+class AdminDashboardStats(BaseModel):
+    """Aggregated stats for the admin command center dashboard."""
+    active_disasters: int = 0
+    total_alerts: int = 0
+    new_alerts: int = 0
+    total_tasks: int = 0
+    pending_tasks: int = 0
+    completed_tasks: int = 0
+    total_ngos: int = 0
+    pending_ngos: int = 0
+    verified_ngos: int = 0
+    total_users: int = 0
+    total_social_posts: int = 0
+
+
+# --- Detailed Report (NEW) ---
+
+class DisasterTypeCount(BaseModel):
+    event_type: str
+    count: int
+
+
+class TasksOverTimeEntry(BaseModel):
+    month: str
+    created: int = 0
+    completed: int = 0
+
+
+class NgoLeaderboardEntry(BaseModel):
+    ngo_id: uuid.UUID
+    org_name: str
+    tasks_completed: int = 0
+    rating: float = 0.0
+
+
+class DetailedReportResponse(BaseModel):
+    """Rich analytics for the admin reports page."""
+    total_disasters: int = 0
+    total_tasks: int = 0
+    avg_completion_rate: float = 0.0
+    disasters_by_type: list[DisasterTypeCount] = []
+    tasks_over_time: list[TasksOverTimeEntry] = []
+    ngo_leaderboard: list[NgoLeaderboardEntry] = []
+
+
+# --- NGO Detailed Response (NEW) ---
+
+class NgoResourceSnapshot(BaseModel):
+    resource_type: str
+    quantity: int = 0
+    description: str | None = None
+
+
+class NgoDetailedResponse(BaseModel):
+    """Full NGO profile with performance metrics."""
+    ngo_id: uuid.UUID
+    org_name: str
+    org_email: str
+    registration_number: str
+    verification_status: str
+    rating: float = 0.0
+    province: str | None = None
+    city: str | None = None
+    address: str | None = None
+    contact_phone: str | None = None
+    website: str | None = None
+    founded_year: int | None = None
+    total_members: int | None = None
+    description: str | None = None
+    is_active: bool = True
+    tasks_completed: int = 0
+    tasks_in_progress: int = 0
+    resources: list[NgoResourceSnapshot] = []
+    specializations: list[str] = []
+    operational_areas: list[str] = []
+    created_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- Messaging (NEW) ---
+
+class MessageCreate(BaseModel):
+    """Schema for sending a new message in a conversation."""
+    receiver_id: uuid.UUID
+    content: str = Field(..., min_length=1, max_length=5000)
+
+
+class MessageResponse(BaseModel):
+    """Single message response."""
+    message_id: uuid.UUID
+    conversation_id: uuid.UUID
+    sender_id: uuid.UUID
+    receiver_id: uuid.UUID
+    content: str
+    is_read: bool = False
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ConversationResponse(BaseModel):
+    """Conversation summary for the sidebar."""
+    conversation_id: uuid.UUID
+    participant_id: uuid.UUID
+    participant_name: str
+    participant_type: str = "ngo_user"
+    last_message: str | None = None
+    last_message_at: datetime | None = None
+    unread_count: int = 0
+
+    model_config = ConfigDict(from_attributes=True)

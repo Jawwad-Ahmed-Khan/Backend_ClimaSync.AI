@@ -88,3 +88,10 @@ class SocialService:
             await self.repo.update_platform_engagement(post_id, platform, payload)
 
         return await self.get_post(post_id)
+
+    async def soft_delete_post(self, post_id: uuid.UUID) -> None:
+        """Soft-delete a social post."""
+        post = await self.repo.get_frontend_view_by_id(post_id)
+        if not post:
+            raise HTTPException(status_code=404, detail="Social post not found")
+        await self.repo.soft_delete_post(post_id)

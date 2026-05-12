@@ -1,6 +1,6 @@
-"""Admin profile and audit log SQLAlchemy models.
+"""Admin profile, audit log, and messaging SQLAlchemy models.
 
-Maps to 'admin_profiles' and 'audit_logs' tables.
+Maps to 'admin_profiles', 'audit_logs', 'conversations', and 'messages' tables.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import ENUM, INET, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.base_model import BaseModel, SoftDeleteMixin
+from app.core.database import Base
 
 
 class AdminProfile(BaseModel, SoftDeleteMixin):
@@ -46,7 +47,7 @@ class AdminProfile(BaseModel, SoftDeleteMixin):
     )
 
 
-class AuditLog(BaseModel):
+class AuditLog(Base):
     """Immutable audit logs mapping to 'audit_logs' table."""
 
     __tablename__ = "audit_logs"
@@ -74,4 +75,70 @@ class AuditLog(BaseModel):
     user: Mapped["User"] = relationship(  # noqa: F821
         "User",
         back_populates="audit_logs",
+    )
+
+
+# --- Messaging Models (NEW) ---
+
+class Conversation(BaseModel):
+    """Represents a conversation between two users."""
+
+    __tablename__ = "conversations"
+
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    user_a_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_b_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    messages: Mapped[list["Message"]] = relationship(
+        "Message",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
+
+
+class Message(BaseModel):
+    """Individual message within a conversation."""
+
+    __tablename__ = "messages"
+
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("conversations.conversation_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sender_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    receiver_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    is_read: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
+    conversation: Mapped[Conversation] = relationship(
+        "Conversation",
+        back_populates="messages",
     )

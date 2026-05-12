@@ -71,3 +71,14 @@ class SocialRepository:
         select_stmt = select(SocialPostPlatform).where(SocialPostPlatform.social_post_id == post_id, SocialPostPlatform.platform == platform)
         result = await self.session.execute(select_stmt)
         return result.scalar_one_or_none()
+
+    async def soft_delete_post(self, post_id: uuid.UUID) -> None:
+        """Soft-delete a social post by setting deleted_at."""
+        from datetime import datetime, timezone
+        stmt = (
+            update(SocialPost)
+            .where(SocialPost.social_post_id == post_id)
+            .values(deleted_at=datetime.now(timezone.utc))
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()

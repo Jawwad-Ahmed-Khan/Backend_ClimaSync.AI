@@ -1,4 +1,5 @@
-"""Admin controller — HTTP endpoints for reporting, ngo validation, and audit logs.
+"""Admin controller — HTTP endpoints for reporting, ngo validation, audit logs,
+dashboard stats, detailed reports, and messaging.
 
 Handles ONLY HTTP concerns.
 """
@@ -13,16 +14,22 @@ from app.modules.admin.dependencies import (
     AdminNgoServiceDep,
     AdminReportServiceDep,
     AdminAuditServiceDep,
+    AdminMessageServiceDep,
     CurrentAdminDep,
 )
 from app.modules.admin.schemas import (
+    AdminDashboardStats,
     AdminReportResponse,
     AuditLogResponse,
+    ConversationResponse,
+    DetailedReportResponse,
+    MessageCreate,
+    MessageResponse,
+    NgoDetailedResponse,
     NgoVerificationUpdate,
 )
 
-# Ngo profiles schema should be imported from somewhere, but we didn't create NgoProfileResponse in admin.
-# Let's import Any or dict for now if needed, or define a simplistic one.
+# Ngo profiles schema
 from pydantic import BaseModel, ConfigDict
 
 class NgoProfileSnapshot(BaseModel):
@@ -37,6 +44,8 @@ class NgoProfileSnapshot(BaseModel):
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
+
+# --- NGO Management ---
 
 @router.get(
     "/ngos",
@@ -78,6 +87,23 @@ async def verify_ngo(
 
 
 @router.get(
+    "/ngos/{ngo_id}/details",
+    response_model=NgoDetailedResponse,
+    summary="Get detailed NGO profile with performance metrics",
+)
+async def get_ngo_details(
+    current_admin: CurrentAdminDep,
+    service: AdminNgoServiceDep,
+    ngo_id: uuid.UUID = Path(...),
+):
+    """Get full NGO profile with resources, specializations, and task counts."""
+    result = await service.get_ngo_details(ngo_id)
+    return result
+
+
+# --- Audit Logs ---
+
+@router.get(
     "/audit-logs",
     response_model=list[AuditLogResponse],
     summary="View system audit logs",
@@ -91,6 +117,8 @@ async def get_audit_logs(
     """Retrieve immutable audit traces of admin activities."""
     return await service.list_audit_logs(limit=limit, offset=offset)
 
+
+# --- Reports ---
 
 @router.get(
     "/reports",
@@ -106,3 +134,99 @@ async def generate_global_report(
 ):
     """Get metrics and system aggregate stats."""
     return await service.generate_global_report()
+
+
+# --- Dashboard Stats (NEW) ---
+
+@router.get(
+    "/stats",
+    response_model=AdminDashboardStats,
+    summary="Get dashboard stats for command center",
+)
+async def get_dashboard_stats(
+    current_admin: CurrentAdminDep,
+    service: AdminReportServiceDep,
+):
+    """Aggregated counts for the admin dashboard stat cards."""
+    return await service.get_dashboard_stats()
+
+
+# --- Detailed Report (NEW) ---
+
+@router.get(
+    "/reports/detailed",
+    response_model=DetailedReportResponse,
+    summary="Generate detailed analytics report",
+)
+@limiter.limit("5/minute")
+async def generate_detailed_report(
+    request: Request,
+    current_admin: CurrentAdminDep,
+    service: AdminReportServiceDep,
+):
+    """Rich analytics: disasters by type, tasks over time, NGO leaderboard."""
+    return await service.generate_detailed_report()
+
+
+# --- Messaging (NEW) ---
+
+@router.get(
+    "/messages/conversations",
+    response_model=list[ConversationResponse],
+    summary="List admin conversations",
+)
+async def list_conversations(
+    current_admin: CurrentAdminDep,
+    service: AdminMessageServiceDep,
+):
+    """Get all conversations for the current admin."""
+    return await service.get_conversations(current_admin.user_id)
+
+
+@router.get(
+    "/messages/conversations/{conversation_id}",
+    response_model=list[MessageResponse],
+    summary="Get messages in a conversation",
+)
+async def get_conversation_messages(
+    current_admin: CurrentAdminDep,
+    service: AdminMessageServiceDep,
+    conversation_id: uuid.UUID = Path(...),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """Fetch messages and mark them as read."""
+    return await service.get_messages(conversation_id, current_admin.user_id, limit=limit, offset=offset)
+
+
+@router.post(
+    "/messages/send",
+    response_model=MessageResponse,
+    status_code=201,
+    summary="Send a message",
+)
+async def send_message(
+    data: MessageCreate,
+    current_admin: CurrentAdminDep,
+    service: AdminMessageServiceDep,
+):
+    """Send a message to another user."""
+    return await service.send_message(
+        sender_id=current_admin.user_id,
+        receiver_id=data.receiver_id,
+        content=data.content,
+    )
+
+
+@router.post(
+    "/messages/conversations/{conversation_id}/read",
+    summary="Mark conversation as read",
+)
+async def mark_conversation_read(
+    current_admin: CurrentAdminDep,
+    service: AdminMessageServiceDep,
+    conversation_id: uuid.UUID = Path(...),
+):
+    """Mark all messages in a conversation as read."""
+    count = await service.mark_read(conversation_id, current_admin.user_id)
+    return {"marked_read": count}

@@ -88,3 +88,18 @@ async def update_engagement(
         platform=platform,
         updates=updates,
     )
+
+
+@router.delete(
+    "/{post_id}",
+    summary="Soft delete a social post",
+    description="Marks a social post as deleted (soft delete). Requires Admin.",
+)
+async def delete_post(
+    current_admin: CurrentAdminDep,
+    service: SocialServiceDep,
+    post_id: uuid.UUID = Path(...),
+):
+    """Soft-delete a social post."""
+    await service.soft_delete_post(post_id)
+    return {"message": "Post deleted successfully"}

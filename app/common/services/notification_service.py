@@ -46,7 +46,7 @@ class NotificationService:
         """
         # Save OTP to a file for Playwright E2E testing to pick up
         import os
-        testing_file = os.path.join(os.path.dirname(__file__), "../../../../front-end-ClimasyncAI/.latest_otp.txt")
+        testing_file = os.path.join(os.path.dirname(__file__), "../../../../ClimaSyncAI_frontend/.latest_otp.txt")
         try:
             with open(testing_file, "w") as f:
                 f.write(raw_otp)

@@ -11,10 +11,12 @@ from app.modules.admin.repository import (
     AdminProfileRepository,
     AdminReportRepository,
     AuditLogRepository,
+    MessageRepository,
 )
 from app.modules.admin.services.ngo_service import AdminNgoService
 from app.modules.admin.services.report_service import AdminReportService
 from app.modules.admin.services.audit_service import AdminAuditService
+from app.modules.admin.services.message_service import AdminMessageService
 from app.modules.auth.dependencies import get_current_user
 from app.modules.ngo.repository import NgoRepository
 from app.modules.users.models import User
@@ -40,6 +42,10 @@ def get_ngo_repository(session: Annotated[AsyncSession, Depends(get_db)]) -> Ngo
     return NgoRepository(session)
 
 
+def get_message_repository(session: Annotated[AsyncSession, Depends(get_db)]) -> MessageRepository:
+    return MessageRepository(session)
+
+
 def get_admin_ngo_service(
     ngo_admin_repo: Annotated[AdminNgoRepository, Depends(get_admin_ngo_repository)],
     ngo_repo: Annotated[NgoRepository, Depends(get_ngo_repository)],
@@ -63,6 +69,12 @@ def get_admin_audit_service(
     return AdminAuditService(audit_repo)
 
 
+def get_admin_message_service(
+    message_repo: Annotated[MessageRepository, Depends(get_message_repository)],
+) -> AdminMessageService:
+    return AdminMessageService(message_repo)
+
+
 async def get_current_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
     """Dependency that enforces admin or super_admin roles."""
     if current_user.role not in ("admin", "super_admin"):
@@ -73,4 +85,5 @@ async def get_current_admin(current_user: Annotated[User, Depends(get_current_us
 AdminNgoServiceDep = Annotated[AdminNgoService, Depends(get_admin_ngo_service)]
 AdminReportServiceDep = Annotated[AdminReportService, Depends(get_admin_report_service)]
 AdminAuditServiceDep = Annotated[AdminAuditService, Depends(get_admin_audit_service)]
+AdminMessageServiceDep = Annotated[AdminMessageService, Depends(get_admin_message_service)]
 CurrentAdminDep = Annotated[User, Depends(get_current_admin)]
