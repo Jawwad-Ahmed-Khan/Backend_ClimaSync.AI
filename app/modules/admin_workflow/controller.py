@@ -26,6 +26,9 @@ from app.modules.admin_workflow.schemas import (
     AdminLoginRequest,
     AlertCreatedResponse,
     IncomingBreachPayload,
+    PrecautionaryListResponse,
+    PrecautionaryRequest,
+    PrecautionaryResponse,
     RiskAnalysisListResponse,
     RiskAnalysisRequest,
     RiskAnalysisResponse,
@@ -34,11 +37,17 @@ from app.modules.admin_workflow.schemas import (
     ThresholdAlertListResponse,
     ThresholdAlertResponse,
 )
-from app.modules.admin_workflow.services import AdminAuthService, RiskAnalysisService, ThresholdAlertService
+from app.modules.admin_workflow.services import (
+    AdminAuthService,
+    PrecautionaryService,
+    RiskAnalysisService,
+    ThresholdAlertService,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["Admin Workflow"])
+precautionary_router = APIRouter(prefix="/precautionary", tags=["Precautionary Measures"])
 
 
 # ============================================================================
@@ -427,4 +436,156 @@ async def get_all_risk_analyses(
     return RiskAnalysisListResponse(
         analyses=[RiskAnalysisResponse.model_validate(analysis) for analysis in analyses],
         total_count=total_count,
+    )
+
+# ============================================================================
+# Task 17.1: Precautionary Measures Endpoints
+# ============================================================================
+
+
+@precautionary_router.post(
+    "/request",
+    response_model=StatusResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Request precautionary measures",
+    description="Request precautionary measures for a completed risk analysis. Creates a precautionary "
+    "measures record with status PENDING and initiates async communication with the Precautionary Agent. "
+    "Returns 202 Accepted immediately. Use the polling endpoint to check status. "
+    "Requires JWT authentication.",
+)
+async def request_precautionary_measures(
+    data: PrecautionaryRequest,
+    db: DbDep,
+    current_user: CurrentAdminUser,
+) -> StatusResponse:
+    """Request precautionary measures for a risk analysis.
+    
+    This endpoint initiates an asynchronous precautionary measures workflow:
+    1. Creates a Precautionary_Measure record with status PENDING
+    2. Sends request to Precautionary Agent (async, may take up to 60 seconds)
+    3. Returns immediately with 202 Accepted
+    
+    The frontend should poll GET /api/precautionary/{precaution_id} 
+    every 2 seconds to check for completion.
+    
+    Requirements: 8.1, 8.9, 17.7
+    """
+    # Request precautionary measures (async workflow)
+    precaution = await PrecautionaryService.request_measures(
+        db=db,
+        analysis_id=data.analysis_id,
+        risk_analysis_data=data.risk_analysis_data.model_dump(),
+        location=data.location.model_dump(),
+        admin_id=current_user.user_id,
+    )
+    
+    return StatusResponse(
+        id=precaution.precaution_id,
+        status=precaution.status,
+        message="Precautionary measures request accepted. Poll the precaution endpoint to check status.",
+    )
+
+
+@precautionary_router.get(
+    "/{precaution_id}",
+    response_model=PrecautionaryResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get precautionary measures by ID",
+    description="Retrieve a single precautionary measure by ID. This is a polling endpoint - "
+    "the frontend should call this every 2 seconds until status is GENERATED or FAILED. "
+    "Requires JWT authentication. Returns 404 if not found.",
+)
+async def get_precautionary_measures_by_id(
+    precaution_id: UUID,
+    db: DbDep,
+    current_user: CurrentAdminUser,
+) -> PrecautionaryResponse:
+    """Retrieve a single precautionary measure.
+    
+    This is a polling endpoint designed to be called repeatedly to check
+    for measures generation completion. The status field indicates the current state:
+    - PENDING: Measures generation in progress, poll again
+    - GENERATED: Measures generated successfully, all fields populated
+    - APPROVED: Measures approved by admin
+    - FAILED: Generation failed, check overall_strategy for error details
+    
+    Requirements: 9.1, 9.4, 9.6
+    """
+    from app.core.exceptions import NotFoundException
+    
+    precaution = await PrecautionaryService.get_measures_by_id(db=db, precaution_id=precaution_id)
+    
+    if not precaution:
+        raise NotFoundException(detail=f"Precautionary measures with ID {precaution_id} not found")
+    
+    return PrecautionaryResponse.model_validate(precaution)
+
+
+@precautionary_router.get(
+    "",
+    response_model=PrecautionaryListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get all precautionary measures",
+    description="Retrieve all precautionary measures with optional filtering by status. "
+    "Supports pagination via limit parameter. Results ordered by created_at descending. "
+    "Requires JWT authentication.",
+)
+async def get_all_precautionary_measures(
+    db: DbDep,
+    current_user: CurrentAdminUser,
+    status_filter: str | None = None,
+    limit: int = 50,
+) -> PrecautionaryListResponse:
+    """Retrieve all precautionary measures.
+    
+    Supports filtering by status (PENDING, GENERATED, APPROVED, IMPLEMENTED) and pagination
+    via limit parameter. Results are ordered by created_at in descending order
+    (most recent first).
+    
+    Requirements: 9.1, 9.4, 9.6
+    """
+    measures, total_count = await PrecautionaryService.get_all_measures(
+        db=db,
+        status=status_filter,
+        limit=limit,
+    )
+    
+    return PrecautionaryListResponse(
+        precautions=[PrecautionaryResponse.model_validate(measure) for measure in measures],
+        total_count=total_count,
+    )
+
+
+@precautionary_router.post(
+    "/{precaution_id}/approve",
+    response_model=SuccessResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Approve precautionary measures",
+    description="Approve precautionary measures. Updates status to APPROVED "
+    "and records the approving admin user. Requires JWT authentication. "
+    "Returns 404 if precaution not found.",
+)
+async def approve_precautionary_measures(
+    precaution_id: UUID,
+    db: DbDep,
+    current_user: CurrentAdminUser,
+) -> SuccessResponse:
+    """Approve precautionary measures.
+    
+    Requirements: 10.1, 10.5, 10.6
+    """
+    from app.core.exceptions import NotFoundException
+    
+    success = await PrecautionaryService.approve_measures(
+        db=db,
+        precaution_id=precaution_id,
+        admin_id=current_user.user_id,
+    )
+    
+    if not success:
+        raise NotFoundException(detail=f"Precautionary measures with ID {precaution_id} not found")
+    
+    return SuccessResponse(
+        success=True,
+        message="Precautionary measures approved successfully",
     )

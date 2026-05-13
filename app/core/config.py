@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # --- Agent API Keys ---
+    AGENT_API_KEY: str = "default_agent_key_change_in_production"
+
+    # --- External Agent URLs ---
+    RISK_ANALYSIS_AGENT_URL: str = "http://localhost:8002"
+    PRECAUTIONARY_AGENT_URL: str = "http://localhost:8003"
+
     # --- OTP ---
     OTP_EXPIRE_MINUTES: int = 10
     OTP_MAX_ATTEMPTS: int = 5
@@ -58,6 +65,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
     ]
 
     # --- Microservice Kill Switches ---
