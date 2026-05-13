@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.core.exceptions import (
     AlreadyExistsException,
     AppException,
+    BadRequestException,
     ForbiddenException,
     NotFoundException,
     UnauthorizedException,
@@ -28,6 +29,7 @@ _STATUS_NOT_FOUND = 404
 _STATUS_UNAUTHORIZED = 401
 _STATUS_FORBIDDEN = 403
 _STATUS_CONFLICT = 409
+_STATUS_BAD_REQUEST = 400
 _STATUS_UNPROCESSABLE = 422
 _STATUS_INTERNAL = 500
 
@@ -82,6 +84,18 @@ async def _forbidden_handler(
     )
 
 
+async def _bad_request_handler(
+    request: Request,
+    exc: BadRequestException,
+) -> JSONResponse:
+    """Handle BadRequestException → 400."""
+    logger.info("Bad request: %s %s — %s", request.method, request.url.path, exc.detail)
+    return JSONResponse(
+        status_code=_STATUS_BAD_REQUEST,
+        content={"detail": exc.detail},
+    )
+
+
 async def _validation_handler(
     request: Request,
     exc: ValidationException,
@@ -121,6 +135,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AlreadyExistsException, _already_exists_handler)  # type: ignore[arg-type]
     app.add_exception_handler(UnauthorizedException, _unauthorized_handler)  # type: ignore[arg-type]
     app.add_exception_handler(ForbiddenException, _forbidden_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(BadRequestException, _bad_request_handler)  # type: ignore[arg-type]
     app.add_exception_handler(ValidationException, _validation_handler)  # type: ignore[arg-type]
     app.add_exception_handler(AppException, _app_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]

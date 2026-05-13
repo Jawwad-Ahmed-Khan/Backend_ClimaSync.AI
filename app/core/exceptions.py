@@ -61,3 +61,10 @@ class ValidationException(AppException):
 
     def __init__(self, detail: str = "Validation error") -> None:
         super().__init__(detail=detail)
+
+
+class BadRequestException(AppException):
+    """Raised when a client request is malformed or violates business rules."""
+
+    def __init__(self, detail: str = "Bad request") -> None:
+        super().__init__(detail=detail)
