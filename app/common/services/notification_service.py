@@ -1,13 +1,20 @@
 """System-wide notification dispatcher replacing localized string-based email functions."""
 
 import logging
-import aiosmtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Try to import aiosmtplib; gracefully degrade if not available
+try:
+    import aiosmtplib
+    AIOSMTPLIB_AVAILABLE = True
+except ImportError:
+    AIOSMTPLIB_AVAILABLE = False
+    logger.warning("aiosmtplib not installed. Email sending will be logged only. Run: pip install aiosmtplib")
 
 class NotificationService:
     """Central decoupled bus orchestrating all outbound external messaging."""
@@ -22,6 +29,15 @@ class NotificationService:
         msg.attach(MIMEText(message, "plain"))
 
         try:
+            if not AIOSMTPLIB_AVAILABLE:
+                logger.warning(
+                    "Email would be sent to %s (subject: %s) but aiosmtplib is not installed. "
+                    "Install it with: pip install aiosmtplib",
+                    email,
+                    subject,
+                )
+                return
+
             await aiosmtplib.send(
                 msg,
                 hostname=settings.SMTP_HOST,

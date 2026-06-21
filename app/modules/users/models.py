@@ -35,7 +35,7 @@ class User(BaseModel, SoftDeleteMixin):
         nullable=False,
     )
     role: Mapped[str] = mapped_column(
-        ENUM("ngo_user", "admin", "super_admin", name="user_role", create_type=False),
+        ENUM("ngo_user", "admin", name="user_role", create_type=False),
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(

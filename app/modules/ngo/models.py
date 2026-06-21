@@ -82,9 +82,9 @@ class NgoProfile(BaseModel, SoftDeleteMixin):
         server_default=text("10"),
     )
     verification_status: Mapped[str] = mapped_column(
-        ENUM("pending", "verified", "rejected", "suspended", name="ngo_verification_status", create_type=False),
+        ENUM("pending", "verified", "rejected", "suspended", name="verification_status", create_type=False),
         nullable=False,
-        server_default=text("'pending'::ngo_verification_status"),
+        server_default=text("'pending'::verification_status"),
     )
     verified_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

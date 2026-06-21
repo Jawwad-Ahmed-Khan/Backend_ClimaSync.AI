@@ -40,6 +40,28 @@ async def list_tasks(
 
 
 @router.get(
+    "/event/{event_id}",
+    response_model=list[TaskResponse],
+    summary="List tasks for a specific disaster event",
+)
+async def list_tasks_by_event(
+    current_user: CurrentUserDep,
+    service: TaskServiceDep,
+    event_id: uuid.UUID = Path(...),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """Retrieve tasks belonging to a specific disaster event."""
+    return await service.list_tasks_by_event(
+        event_id=event_id,
+        limit=limit,
+        offset=offset,
+        user_role=current_user.role,
+        user_id=current_user.user_id
+    )
+
+
+@router.get(
     "/{task_id}",
     response_model=TaskResponse,
     summary="Get Detailed Task",

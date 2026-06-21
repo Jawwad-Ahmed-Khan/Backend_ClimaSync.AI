@@ -1,0 +1,201 @@
+﻿{
+    "assessment_id": "4cfca941-1755-40e5-90ec-f597ec9ff71d",
+    "breach_id": "test-breach-002",
+    "disaster_kind": "flood",
+    "breach_severity_received": "emergency",
+    "location_name": "Lahore",
+    "district": "Lahore",
+    "province": "Punjab",
+    "latitude": 31.5497,
+    "longitude": 74.3436,
+    "observation_time": "2025-07-15T14:30:00+05:00",
+    "is_forecast_breach": false,
+    "forecast_horizon_h": null,
+    "assessment_timestamp": "2026-05-12T15:32:21Z",
+    "agent_version": "1.0",
+    "terrain_assessment": {
+        "terrain_type": "Agricultural Plain",
+        "terrain_source": "web search fallback",
+        "terrain_vulnerability_score": 10,
+        "terrain_multiplier": 1.0,
+        "terrain_implications": [
+            "flat plain aids flood spread"
+        ],
+        "slope_description": "flat",
+        "soil_type": "alluvial loam",
+        "vegetation_cover": "cultivated/urban"
+    },
+    "hazard_severity": {
+        "score": 95.0,
+        "base_score": 65.0,
+        "modifiers_applied": [
+            "Observed 105% of danger (>100%)",
+            "Severity emergency"
+        ],
+        "key_metric_name": "gauge_pct_of_danger",
+        "key_metric_value": "105.3%",
+        "secondary_hazards_identified": [
+            "urban inundation"
+        ],
+        "justification": "Observed gauge at 105% of danger threshold with emergency status triggers high hazard severity."
+    },
+    "exposure": {
+        "score": 90.0,
+        "population_score": 90.0,
+        "infrastructure_score": 25.0,
+        "population_breakdown": {
+            "total_population": 13004135,
+            "population_source": "WorldStats 2026",
+            "population_density_per_sqkm": null,
+            "estimated_directly_affected": 2000000,
+            "estimation_method": "news report",
+            "vulnerable_groups": {},
+            "poverty_rate_pct": null,
+            "poverty_source": null,
+            "outdoor_workers_estimate": null
+        },
+        "infrastructure_at_risk": {
+            "hospitals_count": null,
+            "hospital_beds_total": null,
+            "hospital_beds_per_1000_population": null,
+            "critical_hospitals": [],
+            "schools_count": null,
+            "estimated_students_at_risk": null,
+            "bridges_count": null,
+            "critical_bridges": [],
+            "dams_count": null,
+            "barrages_count": null,
+            "dam_failure_risk": false,
+            "dam_failure_risk_reason": null,
+            "evacuation_centers_count": null,
+            "evacuation_capacity_total": null,
+            "evacuation_coverage_pct": null,
+            "power_stations_at_risk": null,
+            "water_treatment_at_risk": null,
+            "total_critical_assets": 0,
+            "impact_radius_km_used": null
+        },
+        "justification": "Very high population (~13M) yields max population score; infrastructure unknown so minimal score."
+    },
+    "vulnerability": {
+        "score": 60.0,
+        "building_vulnerability_score": 60.0,
+        "building_stock_type": "mixed urban with moderate kutcha/slum areas",
+        "building_stock_source": "generic urban Punjab knowledge base",
+        "kutcha_percentage_estimate": 30.0,
+        "drainage_vulnerability_score": 75.0,
+        "drainage_quality_level": "High",
+        "infrastructure_quality_score": null,
+        "poverty_vulnerability_score": 40.0,
+        "terrain_vulnerability_score": 10.0,
+        "component_scores": {
+            "building": 60.0,
+            "drainage": 75.0,
+            "poverty": 40.0,
+            "terrain": 10.0
+        },
+        "justification": "Urban mix with ~30% kutcha, drainage high, poverty moderate (~35%), flat plain low terrain vulnerability."
+    },
+    "escalation_risk": {
+        "score": 80.0,
+        "is_worsening": true,
+        "trajectory_description": "Flood levels exceeded danger and severe; scenario very active",
+        "current_trajectory_score": 80.0,
+        "secondary_disaster_score": 15.0,
+        "secondary_disasters_possible": [
+            "Disease outbreak"
+        ],
+        "escalation_probability_pct": 70.0,
+        "hours_until_peak_estimate": 6.0,
+        "peak_estimate_basis": "emergency breach observed",
+        "justification": "Levels rising quickly; emergency status, disease risk."
+    },
+    "response_capacity": {
+        "score": 95.0,
+        "medical_capacity_score": 95.0,
+        "evacuation_capacity_score": 95.0,
+        "road_access_score": 95.0,
+        "ngo_presence_score": null,
+        "road_status_description": "Likely blocked in low-lying areas",
+        "ngo_presence_description": null,
+        "nearest_major_hospital_km": null,
+        "response_time_estimate_hours": null,
+        "justification": "Urban mass, but rural hospital beds low; evacuation capacity unknown; roads likely inundated."
+    },
+    "score_breakdown": {
+        "hazard": 95.0,
+        "exposure": 90.0,
+        "vulnerability": 60.0,
+        "escalation": 80.0,
+        "response_capacity": 95.0
+    },
+    "composite_score_before_terrain": 80.5,
+    "terrain_multiplier_applied": 1.0,
+    "composite_risk_score": 80.5,
+    "override_applied": true,
+    "override_reason": "flood_status is emergency â min Risk Level HIGH (70) but score already EXTREME threshold",
+    "risk_level": "EXTREME",
+    "risk_level_justification": "Score >75 and emergency flood override triggers EXTREME.",
+    "impact_estimates": {
+        "estimated_population_affected": 2000000,
+        "estimation_confidence": "MEDIUM",
+        "estimated_deaths_range": null,
+        "death_risk_level": "Moderate",
+        "estimated_displaced_persons": null,
+        "displacement_duration_estimate": null,
+        "estimated_economic_damage_pkr": null,
+        "estimated_economic_damage_usd": null,
+        "economic_damage_confidence": "LOW",
+        "agricultural_land_at_risk_acres": null,
+        "crop_loss_probability_pct": null,
+        "livestock_at_risk_description": null
+    },
+    "situation_trajectory": "Worsening",
+    "escalation_triggers": [
+        "gauge >100% of danger",
+        "emergency severity"
+    ],
+    "web_search_findings": {
+        "terrain_geography": {
+            "query_used": "Lahore Punjab Pakistan geography terrain elevation landscape plains",
+            "key_findings": "Lahore is flat alluvial plain (elevation ~200â230â¯m) in Punjab plains conducive to flooding",
+            "sources_cited": [
+                "turn0search3",
+                "turn0search9"
+            ],
+            "confidence": "HIGH"
+        },
+        "demographics_poverty": null,
+        "historical_disaster_context": null,
+        "current_ground_situation": null,
+        "disaster_specific_findings": []
+    },
+    "recommended_response_urgency": "Emergency",
+    "critical_actions_needed": [
+        "Activate city-wide evacuation in low-lying zones",
+        "Deploy mobile medical units to inundated neighborhoods",
+        "Secure and elevate critical infrastructure (clinics, shelters)",
+        "Pre-position disease prevention kits and safe water",
+        "Establish temporary shelters with sanitation in upland areas"
+    ],
+    "time_sensitive_actions": [
+        "Evacuate before peak flooding (~6â¯h)",
+        "Set up flood barriers immediately",
+        "Monitor disease early signs daily"
+    ],
+    "data_confidence": "LOW",
+    "data_gaps": [
+        "Detailed hospital bed capacity",
+        "Evacuation center counts",
+        "Exact poverty rate",
+        "Displacement numbers",
+        "Economic damage estimates"
+    ],
+    "assumptions_made": [
+        "Population from WorldStats 2026",
+        "Poverty moderate ~35% (Punjab rural default)",
+        "Kutcha ~30% urban",
+        "Drainage quality high urban",
+        "Infrastructure unknown â zero assets"
+    ]
+}

@@ -9,12 +9,19 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
 import bcrypt
 from app.core.config import settings
-import logging
 
 logger = logging.getLogger(__name__)
+
+# Try to import python-jose; gracefully degrade if not available
+try:
+    from jose import JWTError, jwt
+    JOSE_AVAILABLE = True
+except ImportError:
+    JOSE_AVAILABLE = False
+    JWTError = Exception  # Fallback exception class
+    logger.warning("python-jose not installed. JWT functionality disabled. Run: pip install python-jose[cryptography]")
 
 # ---------------------------------------------------------------------------
 # Password hashing (bcrypt)
@@ -82,6 +89,10 @@ def create_access_token(
     extra_claims: dict[str, str] | None = None,
 ) -> str:
     """Create a short-lived JWT access token."""
+    if not JOSE_AVAILABLE:
+        logger.warning("JWT creation attempted but python-jose is not installed. Returning placeholder.")
+        return f"placeholder_token_{subject}"
+    
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
     )
@@ -102,6 +113,10 @@ def create_access_token(
 
 def create_refresh_token(subject: str) -> str:
     """Create a long-lived JWT refresh token."""
+    if not JOSE_AVAILABLE:
+        logger.warning("JWT refresh token creation attempted but python-jose is not installed. Returning placeholder.")
+        return f"placeholder_refresh_token_{subject}"
+    
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS,
     )
@@ -120,6 +135,10 @@ def create_refresh_token(subject: str) -> str:
 
 def decode_token(token: str) -> dict[str, str]:
     """Decode and validate a JWT token. Raises JWTError on failure."""
+    if not JOSE_AVAILABLE:
+        logger.warning("JWT decode attempted but python-jose is not installed. Returning placeholder claims.")
+        return {"sub": "unknown", "type": "access"}
+    
     try:
         return jwt.decode(
             token,

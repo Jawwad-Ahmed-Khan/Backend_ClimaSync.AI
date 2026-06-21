@@ -20,6 +20,16 @@ class TaskService:
         target_ngo_id = user_id if user_role == "ngo_user" else None
         return await self.repo.get_tasks(limit=limit, offset=offset, ngo_id=target_ngo_id)
 
+    async def list_tasks_by_event(self, event_id: uuid.UUID, limit: int = 100, offset: int = 0, user_role: str = "admin", user_id: uuid.UUID | None = None) -> list[Task]:
+        """Fetch tasks for an event, applying role-based NGO filtering."""
+        target_ngo_id = user_id if user_role == "ngo_user" else None
+        return await self.repo.get_tasks_by_event(
+            event_id=event_id, 
+            limit=limit, 
+            offset=offset, 
+            ngo_id=target_ngo_id
+        )
+
     async def get_task(self, task_id: uuid.UUID, user_role: str = "admin", user_id: uuid.UUID | None = None) -> Task:
         """Fetch task securely ensuring ownership for NGOs."""
         task = await self.repo.get_task_by_id(task_id)

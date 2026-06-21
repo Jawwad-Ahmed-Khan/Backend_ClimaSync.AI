@@ -18,6 +18,7 @@ from app.core.database import Base
 from app.modules.users.models import User  # noqa: F401
 from app.modules.auth.models import AuthVerificationToken, AuthRefreshToken  # noqa: F401
 from app.modules.ngo.models import NgoProfile, NgoResource  # noqa: F401
+from app.modules.incoming_alerts.models import IncomingAlert  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

@@ -25,6 +25,15 @@ class TaskRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_tasks_by_event(self, event_id: uuid.UUID, limit: int = 100, offset: int = 0, ngo_id: uuid.UUID | None = None) -> list[Task]:
+        """Fetch tasks for a specific event, optionally restricting to an NGO."""
+        stmt = select(Task).where(Task.event_id == event_id)
+        if ngo_id:
+            stmt = stmt.where(Task.assigned_ngo_id == ngo_id)
+        stmt = stmt.order_by(Task.created_at.desc()).limit(limit).offset(offset)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_task_by_id(self, task_id: uuid.UUID) -> Task | None:
         """Fetch singular task."""
         stmt = select(Task).options(selectinload(Task.history)).where(Task.task_id == task_id)

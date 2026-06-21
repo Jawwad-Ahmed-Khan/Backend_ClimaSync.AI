@@ -80,7 +80,7 @@ class SocialPostPlatform(BaseModel):
         nullable=False,
     )
     platform: Mapped[str] = mapped_column(
-        ENUM("twitter", "facebook", "instagram", "linkedin", "tiktok", name="social_platform", create_type=False),
+        ENUM("twitter", "facebook", "linkedin", "tiktok", name="social_platform", create_type=False),
         nullable=False,
     )
     status: Mapped[str] = mapped_column(

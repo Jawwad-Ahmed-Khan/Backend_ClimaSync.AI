@@ -25,7 +25,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage application startup and shutdown lifecycle."""
     logger.info("Starting %s v%s (%s)", settings.APP_NAME, settings.APP_VERSION, settings.ENVIRONMENT)
     yield
-    await engine.dispose()
+    try:
+        # Only dispose if engine was actually created (via the stub)
+        from app.core.database import _engine
+        if _engine is not None:
+            await _engine.dispose()
+    except Exception as e:
+        logger.warning("Error disposing engine: %s", e)
     logger.info("Shutdown complete")
 
 
@@ -63,8 +69,15 @@ def _register_routers(app: FastAPI) -> None:
     from app.modules.tasks.controller import router as tasks_router
     from app.modules.resources.controller import router as resources_router
     from app.modules.notifications.controller import router as notifications_router
+<<<<<<< HEAD
+    from app.modules.incoming_alerts.controller import router as incoming_alerts_router
+    from app.modules.incoming_alerts.controller import ws_router as alerts_ws_router
+
+    from fastapi import Depends
+=======
     
     from fastapi import Depends, WebSocket, WebSocketDisconnect
+>>>>>>> 8ed4330a0f73be9ed7b8055a337a68b731e2b83a
     from app.core.kill_switch import require_module_active
     from app.websockets.manager import ws_manager
 
@@ -78,6 +91,17 @@ def _register_routers(app: FastAPI) -> None:
     app.include_router(tasks_router, prefix=prefix, dependencies=[Depends(require_module_active("tasks"))])
     app.include_router(resources_router, prefix=prefix, dependencies=[Depends(require_module_active("resources"))])
     app.include_router(notifications_router, prefix=prefix)
+    app.include_router(
+        incoming_alerts_router,
+        prefix=prefix,
+        dependencies=[Depends(require_module_active("incoming_alerts"))],
+    )
+
+    # Risk Analysis microservice proxy
+    from app.modules.risk_analysis.controller import router as risk_analysis_router
+    app.include_router(risk_analysis_router, prefix=prefix)
+    # WebSocket route has no version prefix — clients connect to /ws/alerts
+    app.include_router(alerts_ws_router)
 
     @app.get("/health", tags=["Health"])
     async def health_check() -> JSONResponse:
@@ -112,3 +136,6 @@ def _configure_logging() -> None:
         format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+
+app = create_app()

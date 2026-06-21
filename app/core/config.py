@@ -60,6 +60,15 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
+    # --- Incoming Alert Integration ---
+    # Shared secret sent by the Data Collection Service in X-API-Key header.
+    # Leave empty to disable key verification (development only).
+    INCOMING_ALERT_API_KEY: str = ""
+
+    # --- Risk Analysis Microservice ---
+    RISK_ANALYSIS_URL: str = "http://localhost:8001"
+    RISK_ANALYSIS_API_KEY: str = "b702d6b292994952b843b4b8b1ec5119"
+
     # --- Microservice Kill Switches ---
     MODULE_AUTH_ENABLED: bool = True
     MODULE_ADMIN_ENABLED: bool = True
@@ -68,6 +77,7 @@ class Settings(BaseSettings):
     MODULE_RESOURCES_ENABLED: bool = True
     MODULE_SOCIAL_ENABLED: bool = True
     MODULE_NGO_ENABLED: bool = True
+    MODULE_INCOMING_ALERTS_ENABLED: bool = True
 
     @field_validator("ENVIRONMENT")
     @classmethod
