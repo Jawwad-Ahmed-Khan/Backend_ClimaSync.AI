@@ -1,0 +1,79 @@
+"""System-wide notification dispatcher replacing localized string-based email functions."""
+
+import logging
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Try to import aiosmtplib; gracefully degrade if not available
+try:
+    import aiosmtplib
+    AIOSMTPLIB_AVAILABLE = True
+except ImportError:
+    AIOSMTPLIB_AVAILABLE = False
+    logger.warning("aiosmtplib not installed. Email sending will be logged only. Run: pip install aiosmtplib")
+
+class NotificationService:
+    """Central decoupled bus orchestrating all outbound external messaging."""
+
+    @staticmethod
+    async def dispatch_platform_alert(email: str, subject: str, message: str) -> None:
+        """Raw generic email gateway via pure SMTP."""
+        msg = MIMEMultipart("alternative")
+        msg["From"] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_FROM_EMAIL}>"
+        msg["To"] = email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(message, "plain"))
+
+        try:
+            if not AIOSMTPLIB_AVAILABLE:
+                logger.warning(
+                    "Email would be sent to %s (subject: %s) but aiosmtplib is not installed. "
+                    "Install it with: pip install aiosmtplib",
+                    email,
+                    subject,
+                )
+                return
+
+            await aiosmtplib.send(
+                msg,
+                hostname=settings.SMTP_HOST,
+                port=settings.SMTP_PORT,
+                username=settings.SMTP_USERNAME,
+                password=settings.SMTP_PASSWORD,
+                start_tls=True,
+            )
+            logger.info("Platform alert successfully dispatched to %s", email)
+        except Exception as e:
+            logger.error("Platform alert failure targeting %s: %s", email, str(e))
+            raise
+
+    @classmethod
+    async def dispatch_otp_verification(cls, email: str, raw_otp: str, organization_label: str) -> None:
+        """Triggered primarily by Auth modules verifying identities dynamically."""
+        subject = "Confirm Your ClimaSync Account"
+        body = f"""
+        Welcome {organization_label},
+        Your registration code is: {raw_otp}. 
+        Enter this to activate your disaster response portal.
+        """
+        # Save OTP to a file for Playwright E2E testing to pick up
+        import os
+        testing_file = os.path.join(os.path.dirname(__file__), "../../../../ClimaSyncAI_frontend/.latest_otp.txt")
+        try:
+            with open(testing_file, "w") as f:
+                f.write(raw_otp)
+        except Exception as e:
+            pass
+            
+        await cls.dispatch_platform_alert(email, subject, body)
+
+    @classmethod
+    async def dispatch_password_recovery(cls, email: str, raw_otp: str) -> None:
+        """Emergency override triggers."""
+        subject = "ClimaSync Password Recovery"
+        body = f"Your override code is: {raw_otp}. This sequence expires very soon."
+        await cls.dispatch_platform_alert(email, subject, body)

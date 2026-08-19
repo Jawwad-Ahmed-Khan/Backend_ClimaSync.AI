@@ -27,3 +27,4 @@ history/
 *.swp
 *~
 .DS_Store
+.env.local
